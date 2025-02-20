@@ -76,4 +76,67 @@ public class TokenExchange {
                                                                                                                                                                                                                                     System.out.println(response.body().string());
                                                                                                                                                                                                                                         }
                                                                                                                                                                                                                                         }
+
+
+
+import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpHandler;
+import com.sun.net.httpserver.HttpExchange;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.util.Map;
+import java.util.HashMap;
+
+public class AuthorizationCodeReceiver {
+
+    public static void main(String[] args) throws Exception {
+        // Create an HTTP server listening on port 8080
+        HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
+        server.createContext("/callback", new CallbackHandler());
+        server.setExecutor(null); // creates a default executor
+        server.start();
+        System.out.println("Listening on http://localhost:8080/callback");
+        
+        // The server will continue running, waiting for the redirect.
+    }
+
+    static class CallbackHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            URI requestUri = exchange.getRequestURI();
+            String query = requestUri.getQuery();
+            // Extract parameters from the query string
+            Map<String, String> params = queryToMap(query);
+            String authorizationCode = params.get("code");
+
+            System.out.println("Authorization Code: " + authorizationCode);
+
+            // Send a simple response to the browser
+            String response = "Authorization code received. You can close this window.";
+            exchange.sendResponseHeaders(200, response.length());
+            OutputStream os = exchange.getResponseBody();
+            os.write(response.getBytes());
+            os.close();
+        }
+
+        // Helper method to parse query parameters
+        private Map<String, String> queryToMap(String query) {
+            Map<String, String> result = new HashMap<>();
+            if(query != null) {
+                for (String param : query.split("&")) {
+                    String[] entry = param.split("=");
+                    if (entry.length > 1) {
+                        result.put(entry[0], entry[1]);
+                    } else {
+                        result.put(entry[0], "");
+                    }
+                }
+            }
+            return result;
+        }
+    }
+}
+
                                                                                                                                                                                                                                         
