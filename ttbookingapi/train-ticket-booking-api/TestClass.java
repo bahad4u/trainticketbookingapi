@@ -462,3 +462,93 @@ public class FactsetJsonPayloadWriter implements ItemStreamWriter<FactsetProcess
     }
 
 ==========================================================
+private static final Logger log = LoggerFactory.getLogger(FactsetServiceImpl.class);
+
+    private final FactsetFeedTypeRepository feedTypeRepository;
+    private final FormulaEntryRepository formulaRepository;
+
+    // Constructor injection is preferred for mandatory dependencies
+    @Autowired
+    public FactsetServiceImpl(FactsetFeedTypeRepository feedTypeRepository,
+                              FormulaEntryRepository formulaRepository) {
+        this.feedTypeRepository = feedTypeRepository;
+        this.formulaRepository = formulaRepository;
+    }
+
+    @Override
+    @Transactional(readOnly = true) // Good practice for read operations
+    public List<String> getDisplayNamesByFileType(String feedFileType) throws ServiceException {
+        log.debug("Fetching display names for feedFileType: {}", feedFileType);
+        if (feedFileType == null || feedFileType.isBlank()) {
+            log.warn("feedFileType is null or blank, returning empty list.");
+            return Collections.emptyList();
+        }
+        try {
+            List<FactsetFeedTypeEntity> feedEntries = feedTypeRepository.findByFeedFileTypeIgnoreCase(feedFileType);
+
+            if (feedEntries.isEmpty()) {
+                log.warn("No display names found for feedFileType: {}", feedFileType);
+                return Collections.emptyList();
+            }
+
+            List<String> displayNames = feedEntries.stream()
+                    .map(FactsetFeedTypeEntity::getDisplayName)
+                    .filter(name -> name != null && !name.isBlank()) // Ensure names are not blank
+                    .distinct() // Get unique names
+                    .collect(Collectors.toList());
+
+            log.debug("Found {} unique display names for feedFileType {}", displayNames.size(), feedFileType);
+            return displayNames;
+
+        } catch (Exception e) {
+            // Catch specific persistence exceptions if possible
+            log.error("Database error fetching display names for feedFileType: {}", feedFileType, e);
+            throw new ServiceException("Error fetching display names for feedFileType: " + feedFileType, e);
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, String> getFormulasByDisplayNames(List<String> displayNames) throws ServiceException {
+        log.debug("Fetching formulas for {} display names", displayNames != null ? displayNames.size() : 0);
+        if (displayNames == null || displayNames.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        try {
+            // Fetch all potentially matching formulas in one query
+            List<FormulaEntryEntity> formulaEntries = formulaRepository.findByDisplayNameIn(displayNames);
+
+            if (formulaEntries.isEmpty()) {
+                log.warn("No formulas found for the provided display names: {}", displayNames);
+                return Collections.emptyMap();
+            }
+
+            // Convert list of entities to a Map<DisplayName, Formula>
+            // Using Collectors.toMap - handles potential duplicate displayNames in DB gracefully (uses last one found)
+            Map<String, String> formulaMap = formulaEntries.stream()
+                    .filter(entry -> entry.getDisplayName() != null && entry.getFormula() != null) // Ensure fields aren't null
+                    .collect(Collectors.toMap(
+                            FormulaEntryEntity::getDisplayName, // Key = display name
+                            FormulaEntryEntity::getFormula,   // Value = formula
+                            (existingFormula, newFormula) -> newFormula // If duplicate display name, take the new one
+                    ));
+
+            log.debug("Created formula map with {} entries.", formulaMap.size());
+
+            // Optional: Log which requested display names were NOT found
+            if (log.isWarnEnabled() && formulaMap.size() < displayNames.size()) {
+                 displayNames.forEach(requestedName -> {
+                     if (!formulaMap.containsKey(requestedName)) {
+                         log.warn("No formula found for requested display name: {}", requestedName);
+                     }
+                 });
+            }
+
+            return formulaMap;
+
+        } catch (Exception e) {
+            log.error("Database error fetching formulas for display names: {}", displayNames, e);
+            throw new ServiceException("Error fetching formulas for display names", e);
+        }
+    }
