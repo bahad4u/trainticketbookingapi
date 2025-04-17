@@ -552,3 +552,124 @@ private static final Logger log = LoggerFactory.getLogger(FactsetServiceImpl.cla
             throw new ServiceException("Error fetching formulas for display names", e);
         }
     }
+==========================================================================================================
+    private final ElasticsearchClient esClient;
+    private final BulkIngester<Void> ingester; // Context is Void
+    private final String indexName; // Target index for this instance
+
+    /**
+     * Constructor
+     * @param esClient Injected ElasticsearchClient bean.
+     * @param indexName The target Elasticsearch index (injected via @Value from job parameters).
+     */
+    // Use constructor injection (Autowired is optional on constructor if only one)
+    public FactsetElasticsearchWriter(ElasticsearchClient esClient, String indexName) {
+        this.esClient = Objects.requireNonNull(esClient, "ElasticsearchClient cannot be null");
+        this.indexName = Objects.requireNonNull(indexName, "Target index name cannot be null");
+        if (indexName.isBlank()) {
+             throw new IllegalArgumentException("Target index name cannot be blank");
+        }
+
+        log.info("Initializing FactsetElasticsearchWriter for index: {}", this.indexName);
+
+        // Initialize BulkIngester ONCE
+        this.ingester = BulkIngester.of(b -> b
+                .client(this.esClient)
+                .maxOperations(1000) // Example: Max operations per bulk request
+                .maxSize(5 * 1024 * 1024) // Example: Max total size 5MB
+                .flushInterval(5, TimeUnit.SECONDS) // Example: Max time between flushes
+                // TODO: Add listeners for detailed error handling/logging if needed
+                // .listener(new BulkIngester.Listener<Void>() { ... })
+        );
+        log.info("BulkIngester initialized for Factset writer.");
+    }
+
+    @Override
+    public void write(Chunk<? extends FactsetProcessedSecurityItem> chunk) throws Exception {
+        int skippedCount = 0;
+        int addedCount = 0;
+
+        for (FactsetProcessedSecurityItem item : chunk.getItems()) {
+            if (item == null) {
+                skippedCount++;
+                continue;
+            }
+
+            // --- Check skipCache flag ---
+            if (item.isSkipCache()) {
+                skippedCount++;
+                log.trace("Skipping ES write for item with primaryId '{}' due to skipCache=true", item.getPrimaryIdentifier());
+                continue;
+            }
+
+            // --- Get Payload and Identifiers ---
+            JSONObject payload = item.getRequestPayLoad();
+            String outputIndex = item.getOutputIndex(); // Get index from item (as per original BBG logic)
+            String clientReqId = item.getClientRequestIdentifier();
+            String primaryId = item.getPrimaryIdentifier();
+
+            // --- Validate necessary data ---
+            if (payload == null) {
+                log.warn("Skipping item with primaryId '{}' because its requestPayload JSONObject is null.", primaryId);
+                skippedCount++;
+                continue;
+            }
+            if (outputIndex == null || outputIndex.isBlank()) {
+                 log.warn("Skipping item with primaryId '{}' because its outputIndex is null or blank.", primaryId);
+                 skippedCount++;
+                 continue;
+            }
+             if (clientReqId == null || clientReqId.isBlank() || primaryId == null || primaryId.isBlank()) {
+                 log.warn("Skipping item because clientRequestIdentifier or primaryIdentifier is missing. Payload: {}", payload.toString());
+                 skippedCount++;
+                 continue;
+             }
+
+
+            // --- Prepare Index Operation ---
+            String docId = clientReqId + "_" + primaryId; // Construct document ID
+
+            try {
+                // Convert org.json.JSONObject to Map<String, Object> for ES Client
+                // The ES Java Client's Jackson integration works best with Maps or POJOs.
+                Map<String, Object> payloadMap = payload.toMap();
+
+                IndexOperation<Map<String, Object>> indexOp = IndexOperation.of(idx -> idx
+                        .index(outputIndex.trim()) // Use index from item
+                        .id(docId)
+                        .document(payloadMap) // Index the map representation
+                );
+                BulkOperation bulkOp = BulkOperation.of(op -> op.index(indexOp));
+
+                // Add to shared BulkIngester
+                this.ingester.add(bulkOp);
+                addedCount++;
+
+            } catch (Exception e) {
+                // Log error for specific item preparation
+                log.error("Failed to prepare ES index operation for item primaryId '{}', Doc ID '{}', Index '{}'. Payload: {}",
+                          primaryId, docId, outputIndex, payload.toString().substring(0, Math.min(200, payload.toString().length())), e);
+                // Decide: Continue chunk or fail step? For robustness, often log and continue.
+                // To fail step: throw new RuntimeException("Failed to prepare ES operation for docId: " + docId, e);
+            }
+        }
+
+        log.debug("Processed chunk for ES: Added {} operations to BulkIngester for index '{}', Skipped {} items.", addedCount, this.indexName, skippedCount);
+        // BulkIngester flushes automatically based on its configuration (time/size/operations)
+    }
+
+    /**
+     * Closes the BulkIngester when the bean is destroyed. Important for final flush.
+     */
+    @Override
+    @PreDestroy // Ensure Spring calls this on context shutdown/bean destruction
+    public void close() throws IOException {
+        log.info("Closing BulkIngester for Factset writer (Index: '{}')...", this.indexName);
+        try {
+            this.ingester.close();
+            log.info("BulkIngester for Factset writer closed successfully.");
+        } catch (Exception e) {
+            log.error("Error closing BulkIngester for Factset writer (Index: '{}')", this.indexName, e);
+            // Log but don't necessarily throw from close unless absolutely critical
+        }
+    }
