@@ -381,4 +381,84 @@ public class FactsetJsonPayloadWriter implements ItemStreamWriter<FactsetProcess
     public void update(ExecutionContext executionContext) throws ItemStreamException {
         log.trace("ItemStreamWriter update called.");
     }
-}                                                                                                                                                                                                                                     
+}              
+
+============================================================================================
+
+    public void afterJob(JobExecution jobExecution) {
+        String clientRequestIdentifier = jobExecution.getJobParameters().getString("clientRequestIdentifier");
+        String jobName = jobExecution.getJobInstance().getJobName();
+        BatchStatus jobStatus = jobExecution.getStatus();
+        ExitStatus jobExitStatus = jobExecution.getExitStatus();
+
+        log.info("========================================================================");
+        log.info("Finished Factset Job: {} (Instance ID: {}, Execution ID: {})", jobName, jobExecution.getJobInstance().getInstanceId(), jobExecution.getId());
+        log.info("  Status: {}, Exit Status: {}", jobStatus, jobExitStatus.getExitCode());
+        log.info("  Start Time: {}, End Time: {}", jobExecution.getStartTime(), jobExecution.getEndTime());
+        // ... [Optional: Duration, Step Summaries logging] ...
+
+        // --- Save/Move the output file IF job completed successfully ---
+        if (jobStatus == BatchStatus.COMPLETED) {
+            log.info("Job completed successfully. Attempting to process output file...");
+
+            if (clientRequestIdentifier == null || clientRequestIdentifier.isBlank()) {
+                 log.error("Cannot process output file: clientRequestIdentifier is missing from Job Parameters.");
+                 // Potentially update DB status to reflect this post-processing error
+                 jobExecution.setExitStatus(ExitStatus.FAILED.addDescription("Missing clientRequestIdentifier for post-processing")); // Modify exit status
+                 // Update final status below will reflect FAILED
+            } else if (dataTempDirectory == null || dataTempDirectory.isBlank()) {
+                 log.error("Cannot process output file: Temporary data directory is missing.");
+                 jobExecution.setExitStatus(ExitStatus.FAILED.addDescription("Missing temp directory for post-processing"));
+            } else {
+                // Construct the path to the file expected to be created by the writer
+                Path tempFilePath = Paths.get(dataTempDirectory, clientRequestIdentifier + ".json"); // .json extension
+
+                log.info("Checking for final output file at: {}", tempFilePath.toAbsolutePath());
+                if (Files.exists(tempFilePath)) {
+                    log.info("Output file found. Calling FileService.saveFinalPayloadFile...");
+                    try {
+                        // --- Call your FileService ---
+                        boolean saved = fileService.saveFinalPayloadFile(tempFilePath, clientRequestIdentifier + ".json");
+
+                        if (saved) {
+                            log.info("FileService successfully saved/processed file for request ID: {}", clientRequestIdentifier);
+                            // Delete temp file *only* if save/move was successful and didn't already delete it
+                            try {
+                                Files.deleteIfExists(tempFilePath);
+                                log.info("Deleted temporary file: {}", tempFilePath.getFileName());
+                            } catch (IOException e) {
+                                log.warn("Could not delete temporary file: {}", tempFilePath.getFileName(), e);
+                            }
+                        } else {
+                            log.error("FileService reported failure processing file for request ID: {}", clientRequestIdentifier);
+                            jobExecution.setExitStatus(ExitStatus.FAILED.addDescription("FileService failed to save payload"));
+                        }
+                    } catch (Exception e) {
+                         log.error("Error occurred while calling FileService or handling file for request ID {}: {}", clientRequestIdentifier, tempFilePath.toAbsolutePath(), e);
+                         jobExecution.setExitStatus(ExitStatus.FAILED.addDescription("Error during file saving: " + e.getMessage()));
+                    }
+                } else {
+                    log.error("Output file NOT FOUND at expected location: {}. File could not be saved.", tempFilePath.toAbsolutePath());
+                    jobExecution.setExitStatus(ExitStatus.FAILED.addDescription("Expected output file not found after step completion"));
+                }
+            }
+        } else {
+            log.error("Job did not complete successfully (Status: {}). Final file processing skipped.", jobStatus);
+            jobExecution.getFailureExceptions().forEach(ex -> log.error("  Failure Exception: ", ex));
+        }
+
+        // --- Final Status Update ---
+        try {
+             String finalStatus = jobExecution.getStatus() == BatchStatus.COMPLETED && jobExecution.getExitStatus().getExitCode().equals(ExitStatus.COMPLETED.getExitCode())
+                                  ? "JOB_COMPLETED" : "JOB_FAILED";
+             // TODO: Implement DB status update
+             // statusUpdateService.updateStatus(clientRequestIdentifier, finalStatus, jobExecution.getExitStatus().getExitDescription());
+             log.info("Placeholder: Updated final status for request ID {} to {}.", clientRequestIdentifier, finalStatus);
+         } catch (Exception e) {
+             log.error("Failed to update final job status for request ID {}", clientRequestIdentifier, e);
+         }
+        log.info("========================================================================");
+        // Note: The listener doesn't return an ExitStatus itself, it modifies the JobExecution's status if needed.
+    }
+
+==========================================================
