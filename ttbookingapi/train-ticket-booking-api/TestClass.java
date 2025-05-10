@@ -1014,3 +1014,123 @@ import java.util.concurrent.ConcurrentHashMap;
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             return new FactsetClientRequestItemProcessor(reqId, Boolean.parseBoolean(skipCache), outputIndex, /* providerCacheIndex? */, providerParamService);
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  }
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  }                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+
+
+
+
+
+
+
+import com.opencsv.CSVReader;
+import com.opencsv.exceptions.CsvValidationException;
+import org.springframework.core.io.Resource;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.List;
+
+public class CsvCommonParser {
+
+    public <T> List<T> parse(
+        Resource file,
+        List<String> requiredHeaders,
+        String delimiter,
+        Class<T> targetType
+    ) throws IOException, CsvValidationException {
+        
+        try (InputStream stream = file.getInputStream();
+             CSVReader reader = new CSVReader(new InputStreamReader(stream))) {
+            
+            // Read and validate headers
+            String[] csvHeaders = reader.readNext();
+            validateHeaders(csvHeaders, requiredHeaders);
+            
+            // Parse rows
+            List<T> items = new ArrayList<>();
+            String[] row;
+            while ((row = reader.readNext()) != null) {
+                items.add(mapRowToItem(row, targetType));
+            }
+            return items;
+        }
+    }
+
+    // Streaming version for large files
+    public <T> Iterable<T> parseStreaming(
+        Resource file,
+        List<String> requiredHeaders,
+        String delimiter,
+        Class<T> targetType
+    ) throws IOException, CsvValidationException {
+        
+        InputStream stream = file.getInputStream();
+        CSVReader reader = new CSVReader(new InputStreamReader(stream));
+        
+        // Validate headers
+        String[] csvHeaders = reader.readNext();
+        validateHeaders(csvHeaders, requiredHeaders);
+        
+        return () -> new Iterator<T>() {
+            String[] nextRow;
+
+            @Override
+            public boolean hasNext() {
+                try {
+                    nextRow = reader.readNext();
+                    return nextRow != null;
+                } catch (Exception e) {
+                    closeReader();
+                    return false;
+                }
+            }
+
+            @Override
+            public T next() {
+                return mapRowToItem(nextRow, targetType);
+            }
+
+            private void closeReader() {
+                try {
+                    reader.close();
+                    stream.close();
+                } catch (IOException ignored) {}
+            }
+        };
+    }
+
+    // ------------------------------------
+    // Helper Methods
+    // ------------------------------------
+    
+    private void validateHeaders(String[] csvHeaders, List<String> requiredHeaders) {
+        List<String> missing = requiredHeaders.stream()
+            .filter(h -> !containsIgnoreCase(csvHeaders, h))
+            .toList();
+        
+        if (!missing.isEmpty()) {
+            throw new InvalidCsvHeaderException(
+                "Missing required headers: " + missing
+            );
+        }
+    }
+
+    private boolean containsIgnoreCase(String[] array, String value) {
+        for (String item : array) {
+            if (item.trim().equalsIgnoreCase(value)) return true;
+        }
+        return false;
+    }
+
+    private <T> T mapRowToItem(String[] row, Class<T> targetType) {
+        // Implementation depends on your mapping strategy:
+        // - Use reflection
+        // - Use a pre-defined mapper (like CsvParsingStrategy)
+        // Example for FactsetSecurityItem:
+        FactsetSecurityItem item = new FactsetSecurityItem();
+        item.setInternalId(row[0]);
+        item.setSedol(row[1]);
+        // ... map all fields
+        return (T) item;
+    }
+}
