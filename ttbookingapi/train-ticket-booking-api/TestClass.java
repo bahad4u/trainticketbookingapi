@@ -1134,3 +1134,25 @@ public class CsvCommonParser {
         return (T) item;
     }
 }
+
+
+
+graph TD
+    A[Client] -->|AMD CSV/Flat File| B(service-main)
+    B --> C[Convert to JSON<br>Spring Batch]
+    C -->|JSON Request| D(service-translator)
+    D --> E[API Data Collector]
+    E --> F{Batch by Threshold}
+    F -->|Batch Process| G[Polling Channel]
+    G --> H[Send to Provider]
+    H --> I{Response?}
+    I -->|Yes| J[Store in COS]
+    I -->|No| K[Retry<br>Max 20x]
+    K -->|Success| J
+    K -->|Fail| L[Update Fail Status]
+    J --> M[Kafka Notification]
+    M --> B
+    B --> N[Process Response<br>Spring Batch]
+    N --> O[Client Response<br>Spring Batch]
+    O --> P[Deliver to Client]
+    L --> Q[Failure Notification]
