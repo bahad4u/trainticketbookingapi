@@ -1156,3 +1156,833 @@ graph TD
     N --> O[Client Response<br>Spring Batch]
     O --> P[Deliver to Client]
     L --> Q[Failure Notification]
+
+        <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Ingestion Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #e0f7ff 0%, #f0f9ff 100%);
+            color: #2c3e50;
+            min-height: 100vh;
+        }
+
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.25);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .header h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .nav-tab {
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: #3498db;
+            font-weight: 500;
+        }
+
+        .nav-tab.active {
+            background: rgba(52, 152, 219, 0.2);
+            color: #2c3e50;
+            border: 1px solid rgba(52, 152, 219, 0.3);
+        }
+
+        .nav-tab:hover {
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .summary-card {
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .summary-card h3 {
+            color: #7f8c8d;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .summary-card .value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .summary-card .change {
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .positive { color: #27ae60; }
+        .negative { color: #e74c3c; }
+
+        .charts-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .chart-container h3 {
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+
+        .progress-section {
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: rgba(236, 240, 241, 0.5);
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 20px 0;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3498db 0%, #2ecc71 100%);
+            width: 65%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 0 10px rgba(46, 204, 113, 0.3);
+        }
+
+        .upload-section {
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(10px);
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            text-align: center;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .upload-area {
+            border: 2px dashed rgba(52, 152, 219, 0.5);
+            border-radius: 16px;
+            padding: 40px;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .upload-area:hover {
+            border-color: #3498db;
+            background: rgba(236, 240, 241, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .folder-structure {
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .folder {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .folder-item {
+            padding: 8px;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+
+        .folder-item:hover {
+            background: rgba(236, 240, 241, 0.4);
+            transform: translateX(3px);
+        }
+
+        .folder-icon::before {
+            content: "📁 ";
+        }
+
+        .file-icon::before {
+            content: "📄 ";
+        }
+
+        .data-table {
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            overflow-x: auto;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: rgba(52, 152, 219, 0.8);
+            color: white;
+            box-shadow: 0 4px 10px rgba(52, 152, 219, 0.2);
+        }
+
+        .btn-primary:hover {
+            background: rgba(41, 128, 185, 0.9);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(41, 128, 185, 0.3);
+        }
+
+        .btn-success {
+            background: rgba(46, 204, 113, 0.8);
+            color: white;
+            box-shadow: 0 4px 10px rgba(46, 204, 113, 0.2);
+        }
+
+        .btn-success:hover {
+            background: rgba(39, 174, 96, 0.9);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(39, 174, 96, 0.3);
+        }
+
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-running {
+            background-color: #3498db;
+            color: white;
+        }
+
+        .status-completed {
+            background-color: #27ae60;
+            color: white;
+        }
+
+        .status-failed {
+            background-color: #e74c3c;
+            color: white;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 16px;
+            width: 80%;
+            max-width: 600px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: #000;
+        }
+
+        .config-wizard {
+            display: grid;
+            gap: 20px;
+        }
+
+        .wizard-step {
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.3);
+            backdrop-filter: blur(5px);
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="header">
+            <h1>Data Ingestion Dashboard</h1>
+            <p>Process and standardize vendor files with intelligent mapping</p>
+            
+            <div class="nav-tabs">
+                <button class="nav-tab active" onclick="showTab('dashboard')">Dashboard</button>
+                <button class="nav-tab" onclick="showTab('upload')">Upload & Source</button>
+                <button class="nav-tab" onclick="showTab('configure')">Configure</button>
+                <button class="nav-tab" onclick="showTab('monitor')">Monitor</button>
+                <button class="nav-tab" onclick="showTab('results')">Results</button>
+            </div>
+        </div>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboard-tab" class="tab-content">
+            <div class="summary-cards">
+                <div class="summary-card">
+                    <h3>Total Files Processed</h3>
+                    <div class="value">1,247</div>
+                    <div class="change positive">↑ 12% from last week</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Success Rate</h3>
+                    <div class="value">94.2%</div>
+                    <div class="change positive">↑ 2.1% from last week</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Average Processing Time</h3>
+                    <div class="value">3.4 min</div>
+                    <div class="change negative">↑ 0.3 min from last week</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Active Jobs</h3>
+                    <div class="value">5</div>
+                    <div class="change">Running now</div>
+                </div>
+            </div>
+
+            <div class="charts-section">
+                <div class="chart-container">
+                    <h3>Data Quality KPIs</h3>
+                    <canvas id="qualityChart" width="400" height="200"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3>Processing Status Distribution</h3>
+                    <canvas id="statusChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+
+            <div class="progress-section">
+                <h3>Current Job Progress</h3>
+                <div class="progress-bar">
+                    <div class="progress-fill">65%</div>
+                </div>
+                <p>Processing vendor file: <strong>equity_data_2024.csv</strong></p>
+                <p>Status: <span class="status-badge status-running">Running</span> | Records processed: 45,678 / 70,234</p>
+            </div>
+        </div>
+
+        <!-- Upload Tab -->
+        <div id="upload-tab" class="tab-content" style="display: none;">
+            <div class="upload-section">
+                <h2>Upload Files</h2>
+                <p>Drag and drop your files or click to browse</p>
+                <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                    <p>📁 Select files to upload</p>
+                    <p style="color: #7f8c8d; font-size: 14px; margin-top: 10px;">
+                        Supported formats: CSV, Excel, JSON, XML, PDF, Email
+                    </p>
+                </div>
+                <input type="file" id="fileInput" multiple style="display: none;" onchange="handleFileSelect(event)">
+                
+                <div style="margin-top: 20px;">
+                    <h3>Or Connect to API</h3>
+                    <button class="btn btn-primary">Configure API Source</button>
+                </div>
+            </div>
+
+            <div class="folder-structure">
+                <h3>Recent Files</h3>
+                <div class="folder-item folder-icon">Vendor Data</div>
+                <div class="folder" style="margin-left: 40px;">
+                    <div class="folder-item file-icon">equity_data_2024.csv</div>
+                    <div class="folder-item file-icon">bond_prices.xml</div>
+                    <div class="folder-item folder-icon">Mapping Files</div>
+                    <div class="folder" style="margin-left: 40px;">
+                        <div class="folder-item file-icon">currency_mapping.csv</div>
+                        <div class="folder-item file-icon">market_mapping.json</div>
+                        <div class="folder-item file-icon">decimal_mapping.xlsx</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configure Tab -->
+        <div id="configure-tab" class="tab-content" style="display: none;">
+            <div class="chart-container">
+                <h2>Extraction Configuration Wizard</h2>
+                <div class="config-wizard">
+                    <div class="wizard-step">
+                        <h3>Step 1: Schema Detection</h3>
+                        <div class="form-group">
+                            <label>Detection Mode:</label>
+                            <select>
+                                <option>Auto-detect schema</option>
+                                <option>Use predefined schema</option>
+                                <option>Manual configuration</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="wizard-step">
+                        <h3>Step 2: Load Mapping Files</h3>
+                        <button class="btn btn-primary">Browse Mapping Files</button>
+                        <div style="margin-top: 10px;">
+                            <p>✓ Currency mapping loaded</p>
+                            <p>✓ Market mapping loaded</p>
+                            <p>✓ Decimal mapping loaded</p>
+                        </div>
+                    </div>
+                    
+                    <div class="wizard-step">
+                        <h3>Step 3: Select Required Fields</h3>
+                        <div class="checkbox-group">
+                            <div class="checkbox-item">
+                                <input type="checkbox" checked> Security ID
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" checked> Price
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" checked> Currency
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox"> Market
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" checked> Timestamp
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="wizard-step">
+                        <h3>Step 4: Validation Rules</h3>
+                        <div class="form-group">
+                            <label>Price Range:</label>
+                            <input type="text" placeholder="Min: 0, Max: 1000000">
+                        </div>
+                        <div class="form-group">
+                            <label>Required Fields:</label>
+                            <input type="text" placeholder="security_id, price, currency">
+                        </div>
+                        <div class="checkbox-item">
+                            <input type="checkbox" checked> Remove duplicates
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-success" style="margin-top: 20px;">Save Configuration</button>
+            </div>
+        </div>
+
+        <!-- Monitor Tab -->
+        <div id="monitor-tab" class="tab-content" style="display: none;">
+            <div class="chart-container">
+                <h2>Job Monitoring</h2>
+                <button class="btn btn-primary">Start New Job</button>
+                <button class="btn btn-primary" style="margin-left: 10px;">Schedule Job</button>
+                
+                <div style="margin-top: 20px;">
+                    <h3>Active Jobs</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Job ID</th>
+                                <th>File Name</th>
+                                <th>Status</th>
+                                <th>Progress</th>
+                                <th>Start Time</th>
+                                <th>ETA</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>#J2024001</td>
+                                <td>equity_data_2024.csv</td>
+                                <td><span class="status-badge status-running">Running</span></td>
+                                <td>65%</td>
+                                <td>14:30:22</td>
+                                <td>14:35:00</td>
+                            </tr>
+                            <tr>
+                                <td>#J2024002</td>
+                                <td>bond_prices.xml</td>
+                                <td><span class="status-badge status-running">Running</span></td>
+                                <td>23%</td>
+                                <td>14:31:45</td>
+                                <td>14:38:00</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div style="margin-top: 20px;">
+                    <h3>Recent Completed Jobs</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Job ID</th>
+                                <th>File Name</th>
+                                <th>Status</th>
+                                <th>Records Processed</th>
+                                <th>Duration</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>#J2024000</td>
+                                <td>fx_rates.json</td>
+                                <td><span class="status-badge status-completed">Completed</span></td>
+                                <td>15,234</td>
+                                <td>2m 15s</td>
+                                <td><button class="btn btn-primary">View Results</button></td>
+                            </tr>
+                            <tr>
+                                <td>#J2023999</td>
+                                <td>market_data.pdf</td>
+                                <td><span class="status-badge status-failed">Failed</span></td>
+                                <td>0</td>
+                                <td>30s</td>
+                                <td><button class="btn btn-primary">View Error</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Tab -->
+        <div id="results-tab" class="tab-content" style="display: none;">
+            <div class="data-table">
+                <h2>Processed Data Results</h2>
+                <div style="margin-bottom: 20px;">
+                    <input type="text" placeholder="Search..." style="padding: 8px; width: 300px;">
+                    <button class="btn btn-primary" style="margin-left: 10px;">Filter</button>
+                    <button class="btn btn-success" style="float: right;">Export to CSV</button>
+                    <button class="btn btn-success" style="float: right; margin-right: 10px;">Export to Excel</button>
+                    <button class="btn btn-success" style="float: right; margin-right: 10px;">Export to JSON</button>
+                </div>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Security ID</th>
+                            <th>Security Name</th>
+                            <th>Price</th>
+                            <th>Currency</th>
+                            <th>Market</th>
+                            <th>Timestamp</th>
+                            <th>Source</th>
+                            <th>Quality Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>AAPL</td>
+                            <td>Apple Inc.</td>
+                            <td>182.52</td>
+                            <td>USD</td>
+                            <td>NASDAQ</td>
+                            <td>2024-01-15 14:30:00</td>
+                            <td>equity_data_2024.csv</td>
+                            <td>100%</td>
+                        </tr>
+                        <tr>
+                            <td>MSFT</td>
+                            <td>Microsoft Corp.</td>
+                            <td>423.08</td>
+                            <td>USD</td>
+                            <td>NASDAQ</td>
+                            <td>2024-01-15 14:30:00</td>
+                            <td>equity_data_2024.csv</td>
+                            <td>100%</td>
+                        </tr>
+                        <tr>
+                            <td>GOOGL</td>
+                            <td>Alphabet Inc.</td>
+                            <td>155.32</td>
+                            <td>USD</td>
+                            <td>NASDAQ</td>
+                            <td>2024-01-15 14:30:00</td>
+                            <td>equity_data_2024.csv</td>
+                            <td>95%</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div style="margin-top: 20px; text-align: center;">
+                    <button class="btn btn-primary">Previous</button>
+                    <span style="margin: 0 20px;">Page 1 of 150</span>
+                    <button class="btn btn-primary">Next</button>
+                </div>
+            </div>
+            
+            <div class="chart-container" style="margin-top: 20px;">
+                <h3>Data Quality Metrics</h3>
+                <p>Missing Fields: 2.3% | Validation Errors: 0.8% | Duplicate Records: 0.1%</p>
+                <canvas id="qualityMetricsChart" width="400" height="150"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration Modal -->
+    <div id="configModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2>Configuration Details</h2>
+            <p>Configuration saved successfully!</p>
+        </div>
+    </div>
+
+    <script>
+        function showTab(tabName) {
+            // Hide all tabs
+            const tabs = document.querySelectorAll('.tab-content');
+            tabs.forEach(tab => tab.style.display = 'none');
+            
+            // Remove active class from all nav tabs
+            const navTabs = document.querySelectorAll('.nav-tab');
+            navTabs.forEach(tab => tab.classList.remove('active'));
+            
+            // Show selected tab
+            document.getElementById(tabName + '-tab').style.display = 'block';
+            
+            // Add active class to clicked nav tab
+            event.target.classList.add('active');
+        }
+
+        function handleFileSelect(event) {
+            const files = event.target.files;
+            alert(`Selected ${files.length} file(s) for upload`);
+        }
+
+        function closeModal() {
+            document.getElementById('configModal').style.display = 'none';
+        }
+
+        // Simple chart drawing functions
+        function drawBarChart(canvasId, data) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+            
+            // Draw bars
+            const barWidth = width / (data.length * 2);
+            const maxValue = Math.max(...data.map(d => d.value));
+            
+            data.forEach((item, index) => {
+                const barHeight = (item.value / maxValue) * (height - 40);
+                const x = index * barWidth * 2 + barWidth / 2;
+                const y = height - barHeight - 20;
+                
+                // Draw bar
+                ctx.fillStyle = '#3498db';
+                ctx.fillRect(x, y, barWidth, barHeight);
+                
+                // Draw label
+                ctx.fillStyle = '#2c3e50';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(item.label, x + barWidth / 2, height - 5);
+                
+                // Draw value
+                ctx.fillText(item.value + '%', x + barWidth / 2, y - 5);
+            });
+        }
+
+        function drawPieChart(canvasId, data) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = Math.min(centerX, centerY) - 20;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            let currentAngle = -Math.PI / 2;
+            const total = data.reduce((sum, item) => sum + item.value, 0);
+            
+            data.forEach((item, index) => {
+                const sliceAngle = (item.value / total) * 2 * Math.PI;
+                
+                // Draw slice
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + sliceAngle);
+                ctx.lineTo(centerX, centerY);
+                ctx.fillStyle = ['#3498db', '#2ecc71', '#e74c3c', '#f39c12'][index % 4];
+                ctx.fill();
+                
+                // Draw label
+                const labelX = centerX + Math.cos(currentAngle + sliceAngle / 2) * (radius / 2);
+                const labelY = centerY + Math.sin(currentAngle + sliceAngle / 2) * (radius / 2);
+                
+                ctx.fillStyle = '#2c3e50';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(item.label, labelX, labelY);
+                
+                currentAngle += sliceAngle;
+            });
+        }
+
+        // Initialize charts
+        window.onload = function() {
+            // Quality KPIs chart
+            drawBarChart('qualityChart', [
+                { label: 'Missing Fields', value: 2.3 },
+                { label: 'Validation Errors', value: 0.8 },
+                { label: 'Duplicates', value: 0.1 },
+                { label: 'Format Issues', value: 1.5 }
+            ]);
+            
+            // Status distribution chart
+            drawPieChart('statusChart', [
+                { label: 'Completed', value: 94.2 },
+                { label: 'Failed', value: 3.5 },
+                { label: 'Running', value: 2.3 }
+            ]);
+            
+            // Quality metrics chart
+            drawBarChart('qualityMetricsChart', [
+                { label: 'Week 1', value: 95 },
+                { label: 'Week 2', value: 96 },
+                { label: 'Week 3', value: 94 },
+                { label: 'Week 4', value: 97 }
+            ]);
+        };
+    </script>
+</body>
+</html>
