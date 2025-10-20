@@ -1986,3 +1986,813 @@ graph TD
     </script>
 </body>
 </html>
+
+
+
+        Kafka
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kafka as a Service</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, 'Open Sans', sans-serif;
+            background: #1a1a2e;
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .presentation {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .slide {
+            width: 100%;
+            height: 100%;
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            padding: 60px 80px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .slide.active {
+            display: flex;
+            flex-direction: column;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .slide-number {
+            position: absolute;
+            bottom: 30px;
+            right: 40px;
+            font-size: 14px;
+            opacity: 0.7;
+        }
+
+        /* Slide 1 - Title */
+        .slide-1 {
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .slide-1 h1 {
+            font-size: 72px;
+            margin-bottom: 20px;
+            font-weight: 700;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .slide-1 h2 {
+            font-size: 32px;
+            margin-bottom: 60px;
+            font-weight: 300;
+            opacity: 0.9;
+        }
+
+        .slide-1 .presenter {
+            margin-top: 80px;
+            font-size: 20px;
+            opacity: 0.8;
+        }
+
+        /* Slide 2 - What is Kafka */
+        .slide-2 {
+            background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+        }
+
+        .slide-title {
+            font-size: 48px;
+            margin-bottom: 40px;
+            color: #fff;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
+        }
+
+        .content-box {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+        }
+
+        .bullet-point {
+            font-size: 24px;
+            margin: 15px 0;
+            padding-left: 30px;
+            position: relative;
+        }
+
+        .bullet-point:before {
+            content: "▶";
+            position: absolute;
+            left: 0;
+            color: #667eea;
+        }
+
+        .diagram {
+            margin-top: 30px;
+            padding: 30px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        .flow-diagram {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            margin-top: 20px;
+        }
+
+        .flow-box {
+            background: rgba(102, 126, 234, 0.3);
+            padding: 20px 30px;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: 600;
+            border: 2px solid #667eea;
+        }
+
+        .arrow {
+            font-size: 36px;
+            color: #667eea;
+            margin: 0 15px;
+        }
+
+        /* Slide 3 - Why Event Streaming */
+        .slide-3 {
+            background: linear-gradient(135deg, #2c5282 0%, #2a4365 100%);
+        }
+
+        .comparison-box {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .compare-item {
+            background: rgba(255,255,255,0.1);
+            padding: 25px;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+        }
+
+        .compare-item h3 {
+            font-size: 28px;
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+
+        .use-case {
+            background: rgba(102, 126, 234, 0.2);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            font-size: 18px;
+        }
+
+        /* Slide 4 - Core Components */
+        .slide-4 {
+            background: linear-gradient(135deg, #38b2ac 0%, #319795 100%);
+        }
+
+        .components-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 25px;
+            margin: 30px 0;
+        }
+
+        .component-card {
+            background: rgba(255,255,255,0.15);
+            padding: 25px;
+            border-radius: 12px;
+            text-align: center;
+            border: 2px solid rgba(255,255,255,0.3);
+            transition: transform 0.3s;
+        }
+
+        .component-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .component-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .component-title {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .component-desc {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        /* Slide 5 - KaaS Definition */
+        .slide-5 {
+            background: linear-gradient(135deg, #805ad5 0%, #6b46c1 100%);
+        }
+
+        .kaas-box {
+            background: rgba(255,255,255,0.1);
+            padding: 30px;
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+
+        .providers {
+            display: flex;
+            justify-content: space-around;
+            margin: 25px 0;
+        }
+
+        .provider-badge {
+            background: rgba(102, 126, 234, 0.3);
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 20px;
+            font-weight: 600;
+            border: 2px solid #667eea;
+        }
+
+        /* Slide 6 - Architecture */
+        .slide-6 {
+            background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+        }
+
+        .architecture-flow {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 50px 0;
+            gap: 20px;
+        }
+
+        .arch-node {
+            background: rgba(255,255,255,0.2);
+            padding: 30px 40px;
+            border-radius: 15px;
+            font-size: 22px;
+            font-weight: 600;
+            text-align: center;
+            border: 3px solid rgba(255,255,255,0.4);
+            min-width: 180px;
+        }
+
+        .arch-label {
+            font-size: 14px;
+            margin-top: 10px;
+            opacity: 0.8;
+        }
+
+        /* Slide 7 - Benefits */
+        .slide-7 {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        }
+
+        .benefits-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 25px;
+            margin-top: 30px;
+        }
+
+        .benefit-card {
+            background: rgba(255,255,255,0.15);
+            padding: 30px;
+            border-radius: 12px;
+            border-left: 5px solid #fff;
+        }
+
+        .benefit-icon {
+            font-size: 42px;
+            margin-bottom: 15px;
+        }
+
+        .benefit-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .benefit-desc {
+            font-size: 18px;
+            opacity: 0.9;
+        }
+
+        /* Slide 8 - Use Cases */
+        .slide-8 {
+            background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
+        }
+
+        .usecases-container {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 50px;
+            gap: 30px;
+        }
+
+        .usecase-card {
+            flex: 1;
+            background: rgba(255,255,255,0.15);
+            padding: 35px;
+            border-radius: 15px;
+            text-align: center;
+            border: 2px solid rgba(255,255,255,0.3);
+        }
+
+        .usecase-icon {
+            font-size: 56px;
+            margin-bottom: 20px;
+        }
+
+        .usecase-title {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        /* Slide 9 - Demo */
+        .slide-9 {
+            background: linear-gradient(135deg, #5a67d8 0%, #4c51bf 100%);
+        }
+
+        .demo-steps {
+            background: rgba(0,0,0,0.3);
+            padding: 30px;
+            border-radius: 15px;
+            margin: 30px 0;
+        }
+
+        .step {
+            display: flex;
+            align-items: center;
+            margin: 20px 0;
+            font-size: 20px;
+        }
+
+        .step-number {
+            background: #667eea;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 20px;
+            font-weight: 700;
+        }
+
+        .code-preview {
+            background: #1a202c;
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            margin-top: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        /* Slide 10 - Summary */
+        .slide-10 {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .summary-box {
+            background: rgba(255,255,255,0.1);
+            padding: 40px;
+            border-radius: 15px;
+            margin: 30px 0;
+        }
+
+        .key-takeaway {
+            font-size: 24px;
+            margin: 20px 0;
+            padding-left: 30px;
+            position: relative;
+        }
+
+        .key-takeaway:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #48bb78;
+            font-size: 28px;
+        }
+
+        .footer-cta {
+            text-align: center;
+            margin-top: 40px;
+            font-size: 22px;
+            background: rgba(255,255,255,0.2);
+            padding: 20px;
+            border-radius: 12px;
+        }
+
+        /* Navigation */
+        .nav-buttons {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 1000;
+        }
+
+        .nav-btn {
+            background: rgba(255,255,255,0.3);
+            border: 2px solid #fff;
+            color: #fff;
+            padding: 12px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .nav-btn:hover {
+            background: rgba(255,255,255,0.5);
+            transform: scale(1.05);
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="presentation">
+        <!-- Slide 1: Title -->
+        <div class="slide slide-1 active">
+            <h1>Kafka as a Service</h1>
+            <h2>Real-Time Data Streaming Made Simple</h2>
+            <div class="presenter">
+                <p>Presented by: [Your Name]</p>
+                <p>[Your Team/Organization]</p>
+            </div>
+            <div class="slide-number">1 / 10</div>
+        </div>
+
+        <!-- Slide 2: What is Apache Kafka -->
+        <div class="slide slide-2">
+            <h1 class="slide-title">What is Apache Kafka?</h1>
+            <div class="content-box">
+                <div class="bullet-point">A distributed event streaming platform for high-throughput, fault-tolerant data pipelines</div>
+                <div class="bullet-point">Enables publish-subscribe messaging for real-time data flow across applications</div>
+                <div class="bullet-point">Built for handling millions of events per second with low latency</div>
+                
+                <div class="diagram">
+                    <div class="flow-diagram">
+                        <div class="flow-box">Producers<br/>📤</div>
+                        <div class="arrow">→</div>
+                        <div class="flow-box">Kafka Topics<br/>📊</div>
+                        <div class="arrow">→</div>
+                        <div class="flow-box">Consumers<br/>📥</div>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-number">2 / 10</div>
+        </div>
+
+        <!-- Slide 3: Why Event Streaming -->
+        <div class="slide slide-3">
+            <h1 class="slide-title">Why Event Streaming?</h1>
+            <div class="content-box">
+                <div class="comparison-box">
+                    <div class="compare-item">
+                        <h3>❌ Batch Processing Challenges</h3>
+                        <div class="bullet-point">High latency (hours/days)</div>
+                        <div class="bullet-point">Delayed insights</div>
+                        <div class="bullet-point">Cannot handle real-time needs</div>
+                    </div>
+                    <div class="compare-item">
+                        <h3>✅ Stream Processing Wins</h3>
+                        <div class="bullet-point">Millisecond latency</div>
+                        <div class="bullet-point">Instant insights</div>
+                        <div class="bullet-point">Real-time decision making</div>
+                    </div>
+                </div>
+                
+                <h3 style="margin-top: 40px; font-size: 28px; color: #667eea;">Real-World Examples:</h3>
+                <div style="display: flex; gap: 20px; margin-top: 20px;">
+                    <div class="use-case">🔒 Fraud Detection - Analyze transactions as they occur</div>
+                    <div class="use-case">🌐 IoT Analytics - Process sensor data in real-time</div>
+                    <div class="use-case">📱 User Activity Tracking - Monitor engagement instantly</div>
+                </div>
+            </div>
+            <div class="slide-number">3 / 10</div>
+        </div>
+
+        <!-- Slide 4: Core Components -->
+        <div class="slide slide-4">
+            <h1 class="slide-title">Kafka Core Components</h1>
+            <div class="content-box">
+                <div class="components-grid">
+                    <div class="component-card">
+                        <div class="component-icon">📤</div>
+                        <div class="component-title">Producer</div>
+                        <div class="component-desc">Applications that publish events to Kafka topics</div>
+                    </div>
+                    <div class="component-card">
+                        <div class="component-icon">📂</div>
+                        <div class="component-title">Topic</div>
+                        <div class="component-desc">Categories where events are organized and stored</div>
+                    </div>
+                    <div class="component-card">
+                        <div class="component-icon">🖥️</div>
+                        <div class="component-title">Broker</div>
+                        <div class="component-desc">Kafka servers that store and serve data</div>
+                    </div>
+                    <div class="component-card">
+                        <div class="component-icon">📥</div>
+                        <div class="component-title">Consumer</div>
+                        <div class="component-desc">Applications that read and process events</div>
+                    </div>
+                    <div class="component-card">
+                        <div class="component-icon">👥</div>
+                        <div class="component-title">Consumer Group</div>
+                        <div class="component-desc">Coordinated consumers for parallel processing</div>
+                    </div>
+                    <div class="component-card">
+                        <div class="component-icon">🔄</div>
+                        <div class="component-title">Partition</div>
+                        <div class="component-desc">Topic subdivisions for scalability and parallelism</div>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-number">4 / 10</div>
+        </div>
+
+        <!-- Slide 5: What is KaaS -->
+        <div class="slide slide-5">
+            <h1 class="slide-title">What is Kafka as a Service (KaaS)?</h1>
+            <div class="content-box">
+                <div class="kaas-box">
+                    <div class="bullet-point">Fully managed Kafka clusters hosted in the cloud</div>
+                    <div class="bullet-point">Eliminates infrastructure setup and maintenance complexity</div>
+                    <div class="bullet-point">Focus on building applications, not managing infrastructure</div>
+                </div>
+
+                <h3 style="margin-top: 30px; font-size: 28px; text-align: center;">Leading KaaS Providers</h3>
+                <div class="providers">
+                    <div class="provider-badge">☁️ Confluent Cloud</div>
+                    <div class="provider-badge">🔶 AWS MSK</div>
+                    <div class="provider-badge">⚡ Azure Event Hubs</div>
+                </div>
+
+                <div style="margin-top: 40px; background: rgba(255,255,255,0.15); padding: 25px; border-radius: 12px;">
+                    <h3 style="font-size: 24px; margin-bottom: 15px; color: #667eea;">Key Advantages</h3>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: center;">
+                        <div>⚙️<br/><strong>Automation</strong></div>
+                        <div>📈<br/><strong>Scalability</strong></div>
+                        <div>🎯<br/><strong>Easy Management</strong></div>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-number">5 / 10</div>
+        </div>
+
+        <!-- Slide 6: Architecture -->
+        <div class="slide slide-6">
+            <h1 class="slide-title">Architecture Overview</h1>
+            <div class="content-box">
+                <div class="architecture-flow">
+                    <div class="arch-node">
+                        Applications<br/>📱
+                        <div class="arch-label">Your Services</div>
+                    </div>
+                    <div class="arrow">→</div>
+                    <div class="arch-node">
+                        Cloud Kafka<br/>Cluster ☁️
+                        <div class="arch-label">Managed Infrastructure</div>
+                    </div>
+                    <div class="arrow">→</div>
+                    <div class="arch-node">
+                        Consumers<br/>🎯
+                        <div class="arch-label">Data Processing</div>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 25px; margin-top: 50px;">
+                    <div class="benefit-card">
+                        <div class="benefit-icon">🔄</div>
+                        <div class="benefit-title">Replication</div>
+                        <div class="benefit-desc">Data replicated across multiple brokers for fault tolerance</div>
+                    </div>
+                    <div class="benefit-card">
+                        <div class="benefit-icon">📊</div>
+                        <div class="benefit-title">Partitioning</div>
+                        <div class="benefit-desc">Topics divided into partitions for parallel processing</div>
+                    </div>
+                    <div class="benefit-card">
+                        <div class="benefit-icon">🛡️</div>
+                        <div class="benefit-title">High Availability</div>
+                        <div class="benefit-desc">99.9%+ uptime with automatic failover</div>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-number">6 / 10</div>
+        </div>
+
+        <!-- Slide 7: Benefits -->
+        <div class="slide slide-7">
+            <h1 class="slide-title">Benefits of Kafka as a Service</h1>
+            <div class="content-box">
+                <div class="benefits-grid">
+                    <div class="benefit-card">
+                        <div class="benefit-icon">🚀</div>
+                        <div class="benefit-title">Zero Infrastructure Maintenance</div>
+                        <div class="benefit-desc">No servers to manage, patch, or upgrade. Provider handles all operational tasks.</div>
+                    </div>
+                    <div class="benefit-card">
+                        <div class="benefit-icon">📈</div>
+                        <div class="benefit-title">Auto-Scaling</div>
+                        <div class="benefit-desc">Automatically scales with your workload. Handle traffic spikes effortlessly.</div>
+                    </div>
+                    <div class="benefit-card">
+                        <div class="benefit-icon">🔐</div>
+                        <div class="benefit-title">Security Integrations</div>
+                        <div class="benefit-desc">Built-in TLS encryption, IAM authentication, and compliance certifications.</div>
+                    </div>
+                    <div class="benefit-card">
+                        <div class="benefit-icon">💰</div>
+                        <div class="benefit-title">Cost Efficiency</div>
+                        <div class="benefit-desc">Pay only for what you use. Eliminate over-provisioning and reduce TCO.</div>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-number">7 / 10</div>
+        </div>
+
+        <!-- Slide 8: Use Cases -->
+        <div class="slide slide-8">
+            <h1 class="slide-title">Common Use Cases</h1>
+            <div class="content-box">
+                <div class="usecases-container">
+                    <div class="usecase-card">
+                        <div class="usecase-icon">📊</div>
+                        <div class="usecase-title">Real-Time Analytics</div>
+                        <div class="usecase-desc">Process and analyze data streams instantly for business intelligence and monitoring dashboards</div>
+                    </div>
+                    <div class="usecase-card">
+                        <div class="usecase-icon">🔗</div>
+                        <div class="usecase-title">Microservices Communication</div>
+                        <div class="usecase-desc">Enable asynchronous communication between microservices with event-driven architecture</div>
+                    </div>
+                    <div class="usecase-card">
+                        <div class="usecase-icon">🌐</div>
+                        <div class="usecase-title">IoT Data Streams</div>
+                        <div class="usecase-desc">Ingest and process millions of sensor events from connected devices in real-time</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 50px; text-align: center; background: rgba(255,255,255,0.15); padding: 30px; border-radius: 15px;">
+                    <h3 style="font-size: 24px; margin-bottom: 20px;">Other Applications</h3>
+                    <div style="display: flex; justify-content: space-around; font-size: 18px;">
+                        <span>📧 Log Aggregation</span>
+                        <span>🔄 CDC (Change Data Capture)</span>
+                        <span>🎮 Gaming Events</span>
+                        <span>💳 Payment Processing</span>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-number">8 / 10</div>
+        </div>
+
+        <!-- Slide 9: Demo -->
+        <div class="slide slide-9">
+            <h1 class="slide-title">Demo Overview: Producer-Consumer Flow</h1>
+            <div class="content-box">
+                <div class="demo-steps">
+                    <div class="step">
+                        <div class="step-number">1</div>
+                        <div>Create a Kafka topic named "user-events"</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">2</div>
+                        <div>Producer sends events (e.g., user login, click events)</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">3</div>
+                        <div>Kafka stores events with durability and replication</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">4</div>
+                        <div>Consumer subscribes to topic and processes events in real-time</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">5</div>
+                        <div>Multiple consumers can process data in parallel</div>
+                    </div>
+                </div>
+
+                <div class="code-preview">
+                    <div># Producer Example</div>
+                    <div>kafka-console-producer --topic user-events</div>
+                    <div style="margin-top: 10px;">> {"user": "alice", "action": "login", "timestamp": 1697812800}</div>
+                    <div style="margin-top: 20px; color: #48bb78;"># Consumer reads and processes in real-time! 🚀</div>
+                </div>
+
+                <div style="text-align: center; margin-top: 30px; font-size: 28px; color: #48bb78; font-weight: 600;">
+                    ⚡ Stream data in real time!
+                </div>
+            </div>
+            <div class="slide-number">9 / 10</div>
+        </div>
+
+        <!-- Slide 10: Summary -->
+        <div class="slide slide-10">
+            <h1 class="slide-title">Summary & Future Trends</h1>
+            <div class="content-box">
+                <div class="summary-box">
+                    <h3 style="font-size: 32px; margin-bottom: 30px; color: #48bb78;">Key Takeaways</h3>
+                    <div class="key-takeaway">Kafka is the backbone of modern real-time data architectures</div>
+                    <div class="key-takeaway">Kafka-as-a-Service eliminates operational complexity</div>
+                    <div class="key-takeaway">Enables instant scalability and reliability</div>
+                    <div class="key-takeaway">Powers critical use cases across industries</div>
+                </div>
+
+                <div style="margin-top: 40px; background: rgba(255,255,255,0.15); padding: 30px; border-radius: 15px;">
+                    <h3 style="font-size: 28px; margin-bottom: 20px; text-align: center;">🔮 Future Trends</h3>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: center; font-size: 18px;">
+                        <div>🤖 AI/ML Integration</div>
+                        <div>⚡ Edge Computing</div>
+                        <div>🌍 Multi-Cloud Support</div>
+                    </div>
+                </div>
+
+                <div class="footer-cta">
+                    🚀 <strong>Start Your Journey:</strong> Explore Confluent Cloud or AWS MSK Today!
+                </div>
+            </div>
+            <div class="slide-number">10 / 10</div>
+        </div>
+    </div>
+
+    <div class="nav-buttons">
+        <button class="nav-btn" id="prevBtn" onclick="changeSlide(-1)">← Previous</button>
+        <button class="nav-btn" id="nextBtn" onclick="changeSlide(1)">Next →</button>
+    </div>
+
+    <script>
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        const totalSlides = slides.length;
+
+        function showSlide(n) {
+            slides[currentSlide].classList.remove('active');
+            currentSlide = (n + totalSlides) % totalSlides;
+            slides[currentSlide].classList.add('active');
+            
+            document.getElementById('prevBtn').disabled = currentSlide === 0;
+            document.getElementById('nextBtn').disabled = currentSlide === totalSlides - 1;
+        }
+
+        function changeSlide(direction) {
+            showSlide(currentSlide + direction);
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' && currentSlide > 0) {
+                changeSlide(-1);
+            } else if (e.key === 'ArrowRight' && currentSlide < totalSlides - 1) {
+                changeSlide(1);
+            }
+        });
+
+        // Initialize
+        showSlide(0);
+    </script>
+</body>
+</html>
+        
