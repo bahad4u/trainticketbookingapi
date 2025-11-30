@@ -1329,3 +1329,265 @@
     </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Gateway Pattern Demo</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #2c3e50; display: flex; flex-direction: column; align-items: center; padding: 20px; color: white; }
+        
+        .layout { display: flex; justify-content: space-between; width: 900px; margin-top: 60px; position: relative; }
+        
+        /* CLIENT */
+        .client-zone { width: 200px; display: flex; flex-direction: column; align-items: center; }
+        .phone { width: 100px; height: 180px; background: #34495e; border: 4px solid #95a5a6; border-radius: 15px; position: relative; box-shadow: 0 0 15px rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; flex-direction: column; }
+        .screen { width: 80px; height: 140px; background: white; border-radius: 5px; overflow: hidden; display: flex; flex-direction: column; }
+        .app-header { background: #3498db; height: 20px; width: 100%; }
+        .app-body { padding: 5px; color: #333; font-size: 10px; flex-grow: 1; }
+
+        /* GATEWAY */
+        .gateway-zone { width: 250px; display: flex; flex-direction: column; align-items: center; z-index: 10; }
+        .gateway { width: 200px; height: 220px; background: #e67e22; border-radius: 10px; border: 4px solid #d35400; position: relative; box-shadow: 0 0 20px rgba(230, 126, 34, 0.4); display: flex; flex-direction: column; align-items: center; padding: 10px; color: #fff; }
+        .gateway-title { font-weight: bold; font-size: 18px; margin-bottom: 10px; border-bottom: 2px solid rgba(255,255,255,0.3); width: 100%; text-align: center; padding-bottom: 5px; }
+        
+        .routing-table { font-size: 12px; background: rgba(0,0,0,0.2); width: 100%; border-radius: 5px; padding: 5px; margin-bottom: 10px; font-family: monospace; }
+        .route-row { display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1); padding: 2px 0; }
+        .active-route { background: rgba(255,255,255,0.3); color: white; font-weight: bold; }
+
+        .security-guard { font-size: 30px; margin-top: auto; filter: grayscale(100%); transition: 0.3s; }
+        .security-guard.alert { filter: grayscale(0%); transform: scale(1.2); }
+
+        /* SERVICES */
+        .services-zone { width: 200px; display: flex; flex-direction: column; gap: 20px; }
+        .microservice { padding: 15px; border-radius: 8px; text-align: center; color: white; font-weight: bold; position: relative; transition: 0.3s; opacity: 0.7; }
+        .microservice.active { opacity: 1; transform: scale(1.05); box-shadow: 0 0 15px white; }
+        
+        .svc-product { background: #27ae60; border: 2px solid #2ecc71; } /* Green */
+        .svc-order { background: #8e44ad; border: 2px solid #9b59b6; }   /* Purple */
+        .svc-user { background: #2980b9; border: 2px solid #3498db; }    /* Blue */
+
+        /* ANIMATION DOTS */
+        .dot { width: 15px; height: 15px; background: white; border-radius: 50%; position: absolute; z-index: 100; box-shadow: 0 0 5px white; display: none; }
+        .dot.security-fail { background: red; box-shadow: 0 0 10px red; }
+
+        /* CONTROLS */
+        .controls { background: white; padding: 20px; border-radius: 10px; margin-top: 50px; width: 700px; color: #333; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+        .input-group { display: flex; gap: 10px; justify-content: center; margin-bottom: 15px; align-items: center; }
+        
+        select, input { padding: 8px; border-radius: 5px; border: 1px solid #ccc; font-size: 14px; }
+        
+        button { padding: 10px 20px; cursor: pointer; background: #34495e; color: white; border: none; border-radius: 5px; font-weight: bold; transition: 0.2s; }
+        button:hover { background: #2c3e50; }
+
+        .log-area { background: #eee; padding: 10px; border-radius: 5px; height: 40px; display: flex; align-items: center; justify-content: center; font-family: monospace; font-size: 14px; color: #555; }
+        .checkbox-wrapper { display: flex; align-items: center; gap: 5px; font-weight: bold; color: #333; }
+        
+        /* Connections */
+        .connector { position: absolute; background: #7f8c8d; height: 2px; z-index: 0; transform-origin: left center; }
+
+    </style>
+</head>
+<body>
+
+    <h1>API Gateway Simulator</h1>
+    <p>Single Entry Point. Intelligent Routing. Centralized Security.</p>
+
+    <div class="layout">
+        
+        <div class="client-zone">
+            <h3>Client App</h3>
+            <div class="phone">
+                <div class="screen">
+                    <div class="app-header"></div>
+                    <div class="app-body" id="app-screen">
+                        Ready...
+                    </div>
+                </div>
+            </div>
+            <div style="font-size: 12px; margin-top: 10px; color: #ccc;">Knowing only:<br>api.shop.com</div>
+        </div>
+
+        <div class="gateway-zone">
+            <h3>API Gateway</h3>
+            <div class="gateway">
+                <div class="gateway-title">ROUTER</div>
+                
+                <div class="routing-table">
+                    <div class="route-row" id="row-prod">/products &rarr; 10.0.1.5</div>
+                    <div class="route-row" id="row-order">/orders &rarr; 10.0.1.6</div>
+                    <div class="route-row" id="row-user">/users &rarr; 10.0.1.7</div>
+                </div>
+
+                <div style="font-size: 10px; margin-top: 10px;">🛡️ SECURITY LAYER</div>
+                <div class="security-guard" id="guard">👮</div>
+            </div>
+        </div>
+
+        <div class="services-zone">
+            <div class="microservice svc-product" id="svc-prod">
+                📦 Product Service<br>
+                <small>10.0.1.5:8081</small>
+            </div>
+            <div class="microservice svc-order" id="svc-order">
+                🛒 Order Service<br>
+                <small>10.0.1.6:8082</small>
+            </div>
+            <div class="microservice svc-user" id="svc-user">
+                👤 User Service<br>
+                <small>10.0.1.7:8083</small>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="dot" class="dot"></div>
+
+    <div class="controls">
+        <div class="input-group">
+            <label>Request Path:</label>
+            <select id="path-select">
+                <option value="products">/products (Get Catalog)</option>
+                <option value="orders">/orders (My History)</option>
+                <option value="users">/users (My Profile)</option>
+                <option value="admin">/admin (Unknown Path)</option>
+            </select>
+
+            <div class="checkbox-wrapper">
+                <input type="checkbox" id="auth-check" checked>
+                <label for="auth-check">Include Auth Token (Key)</label>
+            </div>
+
+            <button onclick="sendRequest()">Send Request</button>
+        </div>
+        
+        <div class="log-area" id="log">Waiting for request...</div>
+    </div>
+
+    <script>
+        function sendRequest() {
+            const path = document.getElementById('path-select').value;
+            const hasAuth = document.getElementById('auth-check').checked;
+            const dot = document.getElementById('dot');
+            const guard = document.getElementById('guard');
+            
+            // Reset Visuals
+            resetVisuals();
+            log("Sending request to https://api.shop.com/" + path + "...");
+
+            // 1. Animate Client to Gateway
+            const clientRect = document.querySelector('.phone').getBoundingClientRect();
+            const gatewayRect = document.querySelector('.gateway').getBoundingClientRect();
+
+            dot.style.display = 'block';
+            dot.style.backgroundColor = 'white';
+            dot.style.top = (clientRect.top + 80) + 'px';
+            dot.style.left = (clientRect.left + 50) + 'px';
+
+            setTimeout(() => {
+                dot.style.transition = "all 0.8s ease-in-out";
+                dot.style.top = (gatewayRect.top + 100) + 'px';
+                dot.style.left = (gatewayRect.left + 20) + 'px';
+
+                // ARRIVED AT GATEWAY
+                setTimeout(() => {
+                    
+                    // SECURITY CHECK
+                    if (!hasAuth) {
+                        log("⛔ BLOCKED: 401 Unauthorized. Gateway rejected the request.");
+                        guard.innerText = "🛑";
+                        guard.classList.add('alert');
+                        dot.classList.add('security-fail');
+                        shake(document.querySelector('.gateway'));
+                        
+                        setTimeout(() => { 
+                            dot.style.display = 'none'; 
+                            dot.classList.remove('security-fail');
+                            guard.innerText = "👮";
+                            guard.classList.remove('alert');
+                        }, 1500);
+                        return;
+                    }
+
+                    // ROUTING CHECK
+                    guard.innerText = "✅"; // Pass
+                    
+                    let targetId = "";
+                    let routeRowId = "";
+
+                    if (path === 'products') { targetId = 'svc-prod'; routeRowId = 'row-prod'; }
+                    else if (path === 'orders') { targetId = 'svc-order'; routeRowId = 'row-order'; }
+                    else if (path === 'users') { targetId = 'svc-user'; routeRowId = 'row-user'; }
+                    else {
+                        log("⚠️ ERROR: 404 Not Found. Gateway doesn't know this route.");
+                        shake(document.querySelector('.gateway'));
+                        dot.style.display = 'none';
+                        return;
+                    }
+
+                    // Highlight Routing Table
+                    document.getElementById(routeRowId).classList.add('active-route');
+                    log(`Routing: Map /${path} -> ${document.getElementById(targetId).querySelector('small').innerText}`);
+
+                    // 2. Animate Gateway to Service
+                    const svcBox = document.getElementById(targetId);
+                    const svcRect = svcBox.getBoundingClientRect();
+
+                    dot.style.top = (svcRect.top + 20) + 'px';
+                    dot.style.left = (svcRect.left - 10) + 'px';
+
+                    setTimeout(() => {
+                        pulse(svcBox);
+                        log("✅ SUCCESS: 200 OK. Response received from Microservice.");
+                        document.getElementById('app-screen').innerText = "Data Loaded:\n" + path.toUpperCase();
+                        
+                        // Cleanup
+                        setTimeout(() => {
+                            dot.style.display = 'none';
+                            dot.style.transition = 'none';
+                            document.getElementById(routeRowId).classList.remove('active-route');
+                            guard.innerText = "👮";
+                        }, 1000);
+
+                    }, 800);
+
+                }, 800);
+            }, 100);
+        }
+
+        function resetVisuals() {
+            document.querySelectorAll('.microservice').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.route-row').forEach(el => el.classList.remove('active-route'));
+            document.getElementById('app-screen').innerText = "Loading...";
+        }
+
+        function pulse(el) {
+            el.classList.add('active');
+            setTimeout(() => el.classList.remove('active'), 500);
+        }
+
+        function shake(el) {
+            el.style.transform = "translateX(5px)";
+            setTimeout(() => el.style.transform = "translateX(-5px)", 100);
+            setTimeout(() => el.style.transform = "translateX(5px)", 200);
+            setTimeout(() => el.style.transform = "translateX(0)", 300);
+        }
+
+        function log(msg) {
+            document.getElementById('log').innerText = msg;
+        }
+    </script>
+</body>
+</html>
+
