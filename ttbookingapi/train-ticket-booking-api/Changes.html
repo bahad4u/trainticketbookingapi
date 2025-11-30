@@ -259,3 +259,199 @@
 </body>
 </html>
 
+
+
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bulkhead Pattern Demo</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .container { display: flex; gap: 40px; margin-top: 20px; }
+        
+        /* The Service Cards */
+        .service-card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 300px; text-align: center; }
+        .service-title { font-weight: bold; font-size: 18px; margin-bottom: 10px; display: block; }
+        
+        /* The Resource Slots */
+        .pool-container { background: #eee; padding: 10px; border-radius: 8px; margin: 15px 0; min-height: 50px; display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
+        .slot { width: 25px; height: 25px; border-radius: 50%; border: 2px solid #ccc; background: white; transition: all 0.2s; }
+        .slot.busy-heavy { background-color: #e74c3c; border-color: #c0392b; } /* Red for heavy tasks */
+        .slot.busy-light { background-color: #2ecc71; border-color: #27ae60; } /* Green for light tasks */
+        
+        /* Buttons */
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; color: white; transition: 0.2s; }
+        .btn-heavy { background-color: #e74c3c; } /* Red */
+        .btn-heavy:hover { background-color: #c0392b; }
+        .btn-light { background-color: #2ecc71; } /* Green */
+        .btn-light:hover { background-color: #27ae60; }
+        .btn-toggle { background-color: #34495e; margin-bottom: 20px; }
+        
+        /* Status Text */
+        .status { height: 20px; color: #555; font-size: 14px; margin-top: 5px; font-weight: bold;}
+        .error-msg { color: red; animation: flash 1s; }
+        
+        @keyframes flash { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+
+        /* Mode Indicator */
+        #mode-display { font-size: 22px; font-weight: bold; color: #333; margin-bottom: 10px; }
+        .mode-desc { max-width: 600px; text-align: center; color: #666; margin-bottom: 30px; }
+    </style>
+</head>
+<body>
+
+    <h1>Bulkhead Pattern Simulator</h1>
+    
+    <div id="mode-display">Mode: Shared Resources (Monolith)</div>
+    <div class="mode-desc" id="mode-desc">
+        All tasks compete for the SAME pool of threads. If heavy tasks take them all, light tasks wait or fail.
+    </div>
+
+    <button class="btn-toggle" onclick="toggleMode()">Switch to Bulkhead Mode</button>
+
+    <div class="container">
+        
+        <div class="service-card">
+            <span class="service-title">🎥 Video Processing Service</span>
+            <p>Task Duration: 5 Seconds</p>
+            <div id="pool-heavy" class="pool-container">
+                </div>
+            <button class="btn-heavy" onclick="addTask('heavy')">Start Heavy Task</button>
+            <div id="status-heavy" class="status"></div>
+        </div>
+
+        <div class="service-card">
+            <span class="service-title">🔐 User Login Service</span>
+            <p>Task Duration: 0.5 Seconds</p>
+            <div id="pool-light" class="pool-container">
+                </div>
+            <button class="btn-light" onclick="addTask('light')">Start Login Task</button>
+            <div id="status-light" class="status"></div>
+        </div>
+
+    </div>
+
+    <script>
+        let isBulkheadMode = false;
+        const TOTAL_SLOTS = 10;
+        const BULKHEAD_SPLIT = 5; // 5 slots for heavy, 5 for light in bulkhead mode
+        
+        // State
+        let activeTasks = { heavy: 0, light: 0 };
+
+        function renderPools() {
+            const heavyContainer = document.getElementById('pool-heavy');
+            const lightContainer = document.getElementById('pool-light');
+            heavyContainer.innerHTML = '';
+            lightContainer.innerHTML = '';
+
+            if (!isBulkheadMode) {
+                // Shared Mode: Heavy container holds ALL slots visually
+                lightContainer.style.display = 'none'; // Hide light pool container
+                
+                for(let i=0; i<TOTAL_SLOTS; i++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'slot';
+                    // Visual logic for shared pool
+                    if (i < activeTasks.heavy) slot.classList.add('busy-heavy');
+                    else if (i < activeTasks.heavy + activeTasks.light) slot.classList.add('busy-light');
+                    heavyContainer.appendChild(slot);
+                }
+            } else {
+                // Bulkhead Mode: Separate containers
+                lightContainer.style.display = 'flex';
+
+                // Heavy Pool
+                for(let i=0; i<BULKHEAD_SPLIT; i++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'slot';
+                    if (i < activeTasks.heavy) slot.classList.add('busy-heavy');
+                    heavyContainer.appendChild(slot);
+                }
+                // Light Pool
+                for(let i=0; i<BULKHEAD_SPLIT; i++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'slot';
+                    if (i < activeTasks.light) slot.classList.add('busy-light');
+                    lightContainer.appendChild(slot);
+                }
+            }
+        }
+
+        function addTask(type) {
+            const totalActive = activeTasks.heavy + activeTasks.light;
+
+            // --- LOGIC FOR SHARED MODE ---
+            if (!isBulkheadMode) {
+                if (totalActive >= TOTAL_SLOTS) {
+                    showError(type, "System Overloaded! No Threads Available.");
+                    return;
+                }
+            } 
+            // --- LOGIC FOR BULKHEAD MODE ---
+            else {
+                if (activeTasks[type] >= BULKHEAD_SPLIT) {
+                    showError(type, "Bulkhead Full! Task Rejected.");
+                    return;
+                }
+            }
+
+            // Start the task
+            activeTasks[type]++;
+            renderPools();
+
+            // Simulate duration
+            const duration = type === 'heavy' ? 5000 : 500; // 5s vs 0.5s
+            setTimeout(() => {
+                activeTasks[type]--;
+                renderPools();
+            }, duration);
+        }
+
+        function showError(type, msg) {
+            const el = document.getElementById(type === 'heavy' ? 'status-heavy' : 'status-light');
+            el.innerText = msg;
+            el.classList.add('error-msg');
+            setTimeout(() => {
+                el.innerText = "";
+                el.classList.remove('error-msg');
+            }, 1000);
+        }
+
+        function toggleMode() {
+            isBulkheadMode = !isBulkheadMode;
+            // Reset tasks
+            activeTasks = { heavy: 0, light: 0 };
+            
+            const title = document.getElementById('mode-display');
+            const desc = document.getElementById('mode-desc');
+            const btn = document.querySelector('.btn-toggle');
+
+            if(isBulkheadMode) {
+                title.innerText = "Mode: Bulkhead Pattern (Isolates)";
+                title.style.color = "#2ecc71";
+                desc.innerText = "Resources are partitioned. Even if Video Processing is 100% full, Login Service has its own dedicated slots.";
+                btn.innerText = "Switch to Shared Mode";
+            } else {
+                title.innerText = "Mode: Shared Resources (Monolith)";
+                title.style.color = "#333";
+                desc.innerText = "All tasks compete for the SAME pool of threads. If heavy tasks take them all, light tasks wait or fail.";
+                btn.innerText = "Switch to Bulkhead Mode";
+            }
+            renderPools();
+        }
+
+        // Init
+        renderPools();
+    </script>
+</body>
+</html>
