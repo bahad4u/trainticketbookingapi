@@ -2148,3 +2148,295 @@
     </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Service Registry: Multi-Service Demo</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f6f7; display: flex; flex-direction: column; align-items: center; padding: 20px; color: #333; }
+        
+        .layout { display: flex; gap: 30px; margin-top: 30px; align-items: flex-start; width: 1000px; justify-content: center; }
+        
+        /* BOX STYLES */
+        .box { padding: 15px; border-radius: 8px; text-align: center; position: relative; box-shadow: 0 4px 10px rgba(0,0,0,0.1); transition: all 0.3s; }
+        
+        /* CLIENT */
+        .client-box { width: 200px; background: #2c3e50; color: white; border: 4px solid #1a252f; min-height: 220px; display: flex; flex-direction: column; justify-content: flex-start; padding-top: 20px; z-index: 20; }
+        .client-screen { background: #000; color: #0f0; margin: 10px; padding: 8px; font-family: monospace; font-size: 11px; height: 120px; overflow: hidden; border-radius: 4px; text-align: left; border: 1px solid #555; }
+
+        /* REGISTRY (EUREKA) */
+        .registry-box { width: 280px; background: #8e44ad; color: white; border: 4px solid #6c3483; min-height: 280px; z-index: 10; }
+        .registry-title { font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px; margin-bottom: 10px; }
+        
+        .registry-table { width: 100%; font-size: 11px; border-collapse: collapse; color: white; }
+        .registry-table th { text-align: left; border-bottom: 1px solid rgba(255,255,255,0.2); padding: 4px; }
+        .registry-table td { padding: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .status-up { color: #2ecc71; font-weight: bold; }
+        
+        /* CLOUD ZONE (Services) */
+        .cloud-zone { width: 280px; min-height: 380px; border: 3px dashed #bdc3c7; border-radius: 15px; padding: 15px; display: flex; flex-direction: column; gap: 15px; align-items: center; position: relative; background: rgba(255,255,255,0.5); }
+        .cloud-label { font-weight: bold; color: #7f8c8d; font-size: 14px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px; }
+
+        /* Service Slots */
+        .service-slot { width: 240px; height: 70px; border: 2px dashed #ddd; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #ccc; font-weight: bold; font-size: 12px; position: relative; }
+        
+        .service-instance { width: 100%; height: 100%; color: white; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; padding: 0 15px; box-sizing: border-box; font-size: 13px; position: absolute; top: 0; left: 0; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1); animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        
+        .svc-pricing { background: #e67e22; border: 2px solid #d35400; }
+        .svc-inventory { background: #27ae60; border: 2px solid #219150; }
+        .svc-order { background: #2980b9; border: 2px solid #2471a3; }
+
+        .instance-badge { background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-family: monospace; }
+
+        /* ANIMATION DOTS */
+        .dot { width: 14px; height: 14px; border-radius: 50%; position: absolute; z-index: 100; display: none; border: 2px solid white; }
+        .dot-reg { background: #f1c40f; box-shadow: 0 0 10px #f1c40f; } 
+        .dot-req { background: #3498db; box-shadow: 0 0 10px #3498db; } 
+
+        /* CONTROLS */
+        .controls { background: white; padding: 20px; border-radius: 10px; margin-top: 30px; width: 800px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); text-align: center; }
+        
+        .panel-row { display: flex; justify-content: space-between; margin-bottom: 20px; }
+        .panel-col { display: flex; flex-direction: column; gap: 10px; width: 48%; }
+        
+        h4 { margin: 0 0 10px 0; color: #555; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+
+        /* Buttons */
+        button { padding: 10px 12px; border: 1px solid #ccc; background: #eee; cursor: pointer; border-radius: 4px; font-size: 12px; transition: 0.2s; color: #777; font-weight: bold; }
+        button:hover { background: #ddd; }
+        
+        .btn-pricing.on { background: #e67e22; color: white; border-color: #d35400; }
+        .btn-inventory.on { background: #27ae60; color: white; border-color: #219150; }
+        .btn-order.on { background: #2980b9; color: white; border-color: #2471a3; }
+
+        .btn-req { background: #34495e; color: white; border: none; font-size: 14px; padding: 10px; }
+        .btn-req:hover { background: #2c3e50; }
+
+        /* LOG */
+        .log-display { font-family: monospace; color: #555; font-size: 13px; margin-top: 5px; min-height: 20px; }
+
+        @keyframes popIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); box-shadow: 0 0 15px white; } 100% { transform: scale(1); } }
+        .pulse-anim { animation: pulse 0.3s ease-in-out; }
+
+    </style>
+</head>
+<body>
+
+    <h1>Service Registry: Microservices Directory</h1>
+    <p>The Client asks the Registry for a specific Service Type, and the Registry returns the correct address.</p>
+
+    <div class="layout">
+        
+        <div class="client-box" id="client">
+            <div>📱 Client App</div>
+            <div class="client-screen" id="client-log">
+                > System Ready.
+            </div>
+        </div>
+
+        <div class="registry-box" id="registry">
+            <div class="registry-title">📒 Registry (Phonebook)</div>
+            <table class="registry-table">
+                <thead>
+                    <tr><th>Application Name</th><th>Location</th><th>Status</th></tr>
+                </thead>
+                <tbody id="reg-body">
+                    <tr><td colspan="3" style="text-align:center; padding:20px; opacity:0.6;">Empty...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="cloud-zone">
+            <div class="cloud-label">☁️ Cloud Infrastructure</div>
+            
+            <div class="service-slot">
+                <span style="opacity:0.3">Slot A</span>
+                <div id="svc-pricing" class="service-instance svc-pricing" style="display:none;">
+                    <span>🏷️ Pricing Svc</span>
+                    <span class="instance-badge">10.0.0.1</span>
+                </div>
+            </div>
+
+            <div class="service-slot">
+                <span style="opacity:0.3">Slot B</span>
+                <div id="svc-inventory" class="service-instance svc-inventory" style="display:none;">
+                    <span>📦 Inventory Svc</span>
+                    <span class="instance-badge">10.0.0.2</span>
+                </div>
+            </div>
+
+            <div class="service-slot">
+                <span style="opacity:0.3">Slot C</span>
+                <div id="svc-order" class="service-instance svc-order" style="display:none;">
+                    <span>🛒 Order Svc</span>
+                    <span class="instance-badge">10.0.0.3</span>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <div id="dot" class="dot"></div>
+
+    <div class="controls">
+        <div class="panel-row">
+            <div class="panel-col">
+                <h4>1. Manage Services (Backend)</h4>
+                <button id="btn-pricing" class="btn-pricing" onclick="toggleService('pricing')">Start Pricing Service</button>
+                <button id="btn-inventory" class="btn-inventory" onclick="toggleService('inventory')">Start Inventory Service</button>
+                <button id="btn-order" class="btn-order" onclick="toggleService('order')">Start Order Service</button>
+            </div>
+            <div class="panel-col">
+                <h4>2. Client Actions (Frontend)</h4>
+                <button class="btn-req" onclick="clientCall('pricing')">🏷️ Get Product Price</button>
+                <button class="btn-req" onclick="clientCall('inventory')">📦 Check Stock Level</button>
+                <button class="btn-req" onclick="clientCall('order')">🛒 Place New Order</button>
+            </div>
+        </div>
+        <div class="log-display" id="main-log">Waiting for user input...</div>
+    </div>
+
+    <script>
+        // State
+        const services = {
+            pricing: { active: false, ip: '10.0.0.1', port: 8081, name: 'PRICING-SVC' },
+            inventory: { active: false, ip: '10.0.0.2', port: 8082, name: 'INVENTORY-SVC' },
+            order: { active: false, ip: '10.0.0.3', port: 8083, name: 'ORDER-SVC' }
+        };
+
+        function toggleService(type) {
+            const svc = services[type];
+            const btn = document.getElementById(`btn-${type}`);
+            const el = document.getElementById(`svc-${type}`);
+            const regBox = document.getElementById('registry');
+
+            if (!svc.active) {
+                // START
+                svc.active = true;
+                el.style.display = 'flex';
+                btn.innerText = `Stop ${svc.name}`;
+                btn.classList.add('on');
+                
+                // Animate Registration
+                log(`🚀 ${svc.name} starting up...`);
+                animatePacket(el, regBox, 'dot-reg', () => {
+                    updateRegistryUI();
+                    log(`✅ ${svc.name} registered at ${svc.ip}`);
+                });
+
+            } else {
+                // STOP
+                svc.active = false;
+                el.style.display = 'none';
+                btn.innerText = `Start ${type.charAt(0).toUpperCase() + type.slice(1)} Service`;
+                btn.classList.remove('on');
+                
+                updateRegistryUI();
+                log(`🛑 ${svc.name} shut down.`);
+            }
+        }
+
+        function updateRegistryUI() {
+            const tbody = document.getElementById('reg-body');
+            tbody.innerHTML = "";
+            
+            const activeSvcs = Object.values(services).filter(s => s.active);
+
+            if (activeSvcs.length === 0) {
+                tbody.innerHTML = "<tr><td colspan='3' style='text-align:center; padding:20px; opacity:0.6;'>Empty...</td></tr>";
+                return;
+            }
+
+            activeSvcs.forEach(s => {
+                const row = `<tr><td>${s.name}</td><td>${s.ip}:${s.port}</td><td class="status-up">UP</td></tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+
+        function clientCall(targetType) {
+            const clientLog = document.getElementById('client-log');
+            const clientBox = document.getElementById('client');
+            const registryBox = document.getElementById('registry');
+            const targetSvc = services[targetType];
+            
+            log(`🔎 Client needs ${targetSvc.name}...`);
+            clientLog.innerHTML += `<br>> Need: ${targetSvc.name}`;
+            clientLog.scrollTop = clientLog.scrollHeight;
+
+            // 1. Client -> Registry
+            animatePacket(clientBox, registryBox, 'dot-req', () => {
+                
+                if (!targetSvc.active) {
+                    clientLog.innerHTML += "<br>> <span style='color:red'>ERR: Not in Registry</span>";
+                    log(`❌ Call Failed: Registry has no record of ${targetSvc.name}`);
+                    return;
+                }
+
+                clientLog.innerHTML += `<br>> Found: ${targetSvc.ip}`;
+                clientLog.scrollTop = clientLog.scrollHeight;
+
+                const targetEl = document.getElementById(`svc-${targetType}`);
+
+                // 2. Client -> Service Instance
+                setTimeout(() => {
+                    log(`🚀 Connecting directly to ${targetSvc.ip}:${targetSvc.port}...`);
+                    animatePacket(clientBox, targetEl, 'dot-req', () => {
+                        // Success Animation
+                        targetEl.classList.add('pulse-anim');
+                        setTimeout(() => targetEl.classList.remove('pulse-anim'), 300);
+                        
+                        clientLog.innerHTML += `<br>> <span style='color:#0f0'>200 OK: Data Recvd</span>`;
+                        clientLog.scrollTop = clientLog.scrollHeight;
+                        log(`✅ Success! Received response from ${targetSvc.name}`);
+                    });
+                }, 400);
+            });
+        }
+
+        // --- ANIMATION UTILS ---
+        function animatePacket(fromEl, toEl, dotClass, callback) {
+            const dot = document.getElementById('dot');
+            dot.className = `dot ${dotClass}`;
+            dot.style.display = 'block';
+
+            const fromRect = fromEl.getBoundingClientRect();
+            const toRect = toEl.getBoundingClientRect();
+
+            // Start
+            dot.style.top = (fromRect.top + fromRect.height/2 - 7) + 'px';
+            dot.style.left = (fromRect.left + fromRect.width/2 - 7) + 'px';
+            dot.style.transition = 'none';
+            
+            void dot.offsetWidth; // Force Reflow
+
+            // End
+            dot.style.transition = 'all 0.6s ease-in-out';
+            dot.style.top = (toRect.top + toRect.height/2 - 7) + 'px';
+            dot.style.left = (toRect.left + toRect.width/2 - 7) + 'px';
+
+            setTimeout(() => {
+                dot.style.display = 'none';
+                if(callback) callback();
+            }, 600);
+        }
+
+        function log(msg) {
+            document.getElementById('main-log').innerText = msg;
+        }
+    </script>
+</body>
+</html>
