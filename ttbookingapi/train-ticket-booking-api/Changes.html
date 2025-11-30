@@ -3437,3 +3437,257 @@
     </script>
 </body>
 </html>
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CQRS Pattern Simulator (Fixed)</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #2c3e50; display: flex; flex-direction: column; align-items: center; padding: 20px; color: white; }
+        
+        /* Main Layout Container - Fixed width for stability */
+        .layout { 
+            position: relative; /* Anchor for absolute children */
+            display: flex; 
+            justify-content: space-between; /* Push columns to edges */
+            width: 800px; 
+            margin-top: 50px; 
+        }
+        
+        /* COLUMNS */
+        .column { display: flex; flex-direction: column; align-items: center; width: 300px; z-index: 2; }
+        
+        /* DATABASES */
+        .db { width: 120px; height: 140px; border-radius: 50%/20px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; margin-bottom: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); transition: all 0.2s; background-color: #333; }
+        .db::before { content: ''; position: absolute; top: -10px; left: 0; width: 100%; height: 20px; border-radius: 50%; border: inherit; background: inherit; filter: brightness(1.2); }
+        
+        .db-write { background: #c0392b; border: 4px solid #922b21; color: white; } /* Red */
+        .db-read { background: #27ae60; border: 4px solid #1e8449; color: white; }  /* Green */
+
+        .db-data { font-family: monospace; background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 4px; margin-top: 10px; }
+
+        /* SYNC PIPE (The Bus) */
+        .sync-pipe-container {
+            position: absolute;
+            top: 70px; /* Vertically align with center of DBs (140px height / 2) */
+            left: 150px; /* Start at center of Col 1 (300px / 2) */
+            width: 500px; /* Span to center of Col 2 */
+            height: 12px;
+            z-index: 0; /* Behind DBs */
+        }
+
+        .sync-pipe-line {
+            width: 100%;
+            height: 100%;
+            background: #555;
+            border-radius: 6px;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.5);
+        }
+
+        .sync-label {
+            position: absolute;
+            top: -25px;
+            width: 100%;
+            text-align: center;
+            color: #aaa;
+            font-size: 12px;
+            letter-spacing: 1px;
+            font-weight: bold;
+        }
+
+        /* PACKET (The Event) */
+        .packet { 
+            width: 24px; 
+            height: 24px; 
+            background: #f1c40f; 
+            border: 2px solid white;
+            border-radius: 50%; 
+            position: absolute; 
+            top: -6px; /* Center on pipe height (12px) */
+            left: 0; 
+            display: none; 
+            box-shadow: 0 0 15px #f1c40f; 
+            z-index: 5; 
+        }
+
+        /* USER INTERFACE BOXES */
+        .user-box { width: 100%; background: #34495e; border-radius: 8px; padding: 15px; text-align: center; border: 2px solid #555; min-height: 180px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+        .user-title { font-weight: bold; margin-bottom: 10px; display: block; border-bottom: 1px solid #555; padding-bottom: 5px; color: #ccc; letter-spacing: 1px; font-size: 12px; }
+        
+        input { padding: 10px; border-radius: 4px; border: none; width: 100px; text-align: center; font-weight: bold; font-size: 16px; }
+        
+        button { padding: 10px 20px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold; margin-top: 15px; transition: 0.2s; color: white; width: 80%; }
+        
+        .btn-update { background: #e67e22; }
+        .btn-update:hover { background: #d35400; }
+
+        .btn-refresh { background: #3498db; }
+        .btn-refresh:hover { background: #2980b9; }
+
+        /* DISPLAY TEXT */
+        .price-display { font-size: 32px; font-weight: bold; color: #2ecc71; margin: 15px 0; }
+        .status-msg { font-size: 13px; color: #ccc; min-height: 20px; margin-top: 10px; font-family: monospace; }
+
+        /* ANIMATION UTILS */
+        .pulse { animation: pulse 0.3s ease-in-out; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+
+    </style>
+</head>
+<body>
+
+    <h1>CQRS Pattern Simulator</h1>
+    <p>Visualizing <b>Eventual Consistency</b> (The delay between Write and Read)</p>
+
+    <div class="layout">
+        
+        <div class="sync-pipe-container">
+            <div class="sync-label">⚡ EVENT BUS (SYNC) ⚡</div>
+            <div class="sync-pipe-line"></div>
+            <div id="packet" class="packet"></div>
+        </div>
+
+        <div class="column">
+            <h3>COMMAND (Write)</h3>
+            <div class="db db-write" id="db-write">
+                <div style="margin-top:15px">MASTER DB</div>
+                <div class="db-data" id="val-write">$100</div>
+            </div>
+            
+            <div class="user-box">
+                <span class="user-title">👤 ADMIN PANEL</span>
+                <p>Change Product Price</p>
+                <input type="number" id="price-input" value="150">
+                <br>
+                <button class="btn-update" onclick="updatePrice()">Update Price</button>
+                <div class="status-msg" id="msg-admin">System Ready.</div>
+            </div>
+        </div>
+
+        <div class="column">
+            <h3>QUERY (Read)</h3>
+            <div class="db db-read" id="db-read">
+                <div style="margin-top:15px">READ DB</div>
+                <div class="db-data" id="val-read">$100</div>
+            </div>
+
+            <div class="user-box">
+                <span class="user-title">🛒 CUSTOMER APP</span>
+                <p>User Viewing Item</p>
+                <div class="price-display" id="cust-price">$100</div>
+                <button class="btn-refresh" onclick="refreshPage()">🔄 Refresh Page</button>
+                <div class="status-msg" id="msg-cust">Data source: Read DB</div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let writePrice = 100;
+        let readPrice = 100;
+        let isSyncing = false;
+
+        function updatePrice() {
+            const inputVal = document.getElementById('price-input').value;
+            
+            // 1. Update Command DB Instantly
+            writePrice = inputVal;
+            document.getElementById('val-write').innerText = "$" + writePrice;
+            
+            const msgAdmin = document.getElementById('msg-admin');
+            msgAdmin.innerText = "Saved to Write DB!";
+            msgAdmin.style.color = "#e67e22";
+
+            // Visual Pulse for DB
+            const dbWrite = document.getElementById('db-write');
+            dbWrite.classList.remove('pulse');
+            void dbWrite.offsetWidth; // trigger reflow
+            dbWrite.classList.add('pulse');
+
+            // 2. Trigger Async Sync (with delay)
+            if(!isSyncing) {
+                isSyncing = true;
+                // Start animation after a short delay to simulate "processing"
+                setTimeout(startSyncAnimation, 500); 
+            }
+        }
+
+        function startSyncAnimation() {
+            const packet = document.getElementById('packet');
+            const containerWidth = 500; // Width of sync-pipe-container
+            const packetSize = 24;
+            
+            packet.style.display = 'block';
+            packet.style.left = '0px';
+
+            let pos = 0;
+            // Slower animation to allow time for "Stale Data" demo
+            const speed = 3; 
+            
+            const interval = setInterval(() => {
+                pos += speed;
+                packet.style.left = pos + 'px';
+
+                // Check if reached end (Container Width - Packet Size)
+                if (pos >= (containerWidth - packetSize)) {
+                    clearInterval(interval);
+                    finishSync();
+                }
+            }, 10);
+        }
+
+        function finishSync() {
+            const packet = document.getElementById('packet');
+            packet.style.display = 'none';
+            
+            // Update Read DB
+            readPrice = writePrice;
+            document.getElementById('val-read').innerText = "$" + readPrice;
+            
+            // Visual Pulse for Read DB
+            const dbRead = document.getElementById('db-read');
+            dbRead.classList.remove('pulse');
+            void dbRead.offsetWidth; 
+            dbRead.classList.add('pulse');
+
+            isSyncing = false;
+            
+            // Auto update customer view if they are watching? 
+            // Ideally no, in web apps user must refresh, but let's notify status
+            document.getElementById('msg-cust').innerText = "✅ Database Synced.";
+            document.getElementById('msg-cust').style.color = "#2ecc71";
+        }
+
+        function refreshPage() {
+            // Customer reads ONLY from Read DB
+            document.getElementById('cust-price').innerText = "$" + readPrice;
+            
+            const msg = document.getElementById('msg-cust');
+            
+            if (readPrice != writePrice) {
+                // STALE DATA SCENARIO
+                msg.innerText = "⚠️ STALE DATA! (Reading old value)";
+                msg.style.color = "#f1c40f";
+                shake(document.querySelector('.price-display'));
+            } else {
+                // FRESH DATA SCENARIO
+                msg.innerText = "✅ Fresh Data (Synced)";
+                msg.style.color = "#2ecc71";
+            }
+        }
+
+        function shake(el) {
+            el.style.transform = "translateX(5px)";
+            setTimeout(() => el.style.transform = "translateX(-5px)", 50);
+            setTimeout(() => el.style.transform = "translateX(5px)", 100);
+            setTimeout(() => el.style.transform = "translateX(0)", 150);
+        }
+    </script>
+</body>
+</html>
