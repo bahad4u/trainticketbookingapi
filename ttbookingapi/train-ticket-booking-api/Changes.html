@@ -2440,3 +2440,297 @@
     </script>
 </body>
 </html>
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Circuit Breaker Pattern Demo (Fixed)</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; display: flex; flex-direction: column; align-items: center; padding: 20px; color: #333; }
+        
+        .layout { display: flex; gap: 50px; margin-top: 40px; align-items: center; }
+        
+        /* BOXES */
+        .box { width: 180px; height: 120px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.1); position: relative; transition: all 0.3s; }
+        
+        .client { background: #34495e; color: white; border-bottom: 5px solid #2c3e50; }
+        
+        /* SERVICE BOX */
+        .service { background: #27ae60; color: white; border-bottom: 5px solid #219150; }
+        .service.crashed { background: #c0392b; border-color: #922b21; animation: shake 0.5s; }
+
+        /* CIRCUIT BREAKER (Middle) */
+        .breaker { width: 160px; height: 160px; border-radius: 50%; border: 8px solid #ddd; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; font-size: 14px; position: relative; }
+        
+        .breaker.closed { border-color: #27ae60; color: #27ae60; }
+        .breaker.open { border-color: #c0392b; color: #c0392b; }
+        .breaker.half-open { border-color: #f1c40f; color: #f39c12; }
+
+        .breaker-icon { font-size: 40px; margin-bottom: 5px; }
+        .breaker-state { font-weight: 800; text-transform: uppercase; }
+        .timer-display { font-size: 12px; color: #777; margin-top: 5px; height: 15px; }
+
+        /* LINES */
+        .line { width: 60px; height: 6px; background: #bdc3c7; }
+        .line.active-success { background: #27ae60; }
+        .line.active-fail { background: #c0392b; }
+
+        /* DOT ANIMATION */
+        .dot { width: 15px; height: 15px; border-radius: 50%; position: absolute; z-index: 100; display: none; }
+        .dot-req { background: #3498db; box-shadow: 0 0 10px #3498db; }
+
+        /* CONTROLS */
+        .controls { background: white; padding: 25px; border-radius: 10px; margin-top: 50px; width: 600px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); text-align: center; }
+        
+        .btn-group { display: flex; justify-content: center; gap: 20px; margin-bottom: 20px; }
+        
+        button { padding: 12px 20px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; font-size: 14px; transition: 0.2s; color: white; }
+        .btn-req { background: #3498db; width: 180px; }
+        .btn-req:hover { background: #2980b9; }
+        
+        .btn-health { background: #27ae60; width: 180px; }
+        .btn-health:hover { background: #219150; }
+        .btn-health.dead { background: #c0392b; }
+        .btn-health.dead:hover { background: #a93226; }
+
+        /* LOG */
+        .log-area { font-family: monospace; background: #eee; padding: 10px; border-radius: 5px; height: 100px; overflow-y: auto; text-align: left; font-size: 12px; border: 1px solid #ccc; }
+        .log-err { color: #c0392b; }
+        .log-warn { color: #d68910; }
+        .log-succ { color: #27ae60; }
+
+        @keyframes shake { 0% { transform: translateX(0); } 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } 100% { transform: translateX(0); } }
+
+    </style>
+</head>
+<body>
+
+    <h1>Circuit Breaker Pattern</h1>
+    <p>States: 🟢 CLOSED (Normal) &rarr; 🔴 OPEN (Blocked) &rarr; 🟡 HALF-OPEN (Testing)</p>
+
+    <div class="layout">
+        
+        <div class="box client" id="client-box">
+            <span>👤 User App</span>
+        </div>
+
+        <div class="line" id="line-1"></div>
+
+        <div class="breaker closed" id="cb">
+            <div class="breaker-icon" id="cb-icon">⚡</div>
+            <div class="breaker-state" id="cb-state">CLOSED</div>
+            <div class="timer-display" id="cb-timer">Failures: 0/3</div>
+        </div>
+
+        <div class="line" id="line-2"></div>
+
+        <div class="box service" id="svc-box">
+            <span id="svc-text">📦 Service<br>(Online)</span>
+        </div>
+
+    </div>
+
+    <div id="dot" class="dot"></div>
+
+    <div class="controls">
+        <div class="btn-group">
+            <button class="btn-req" onclick="sendRequest()">🚀 Send Request</button>
+            <button class="btn-health" id="btn-health" onclick="toggleHealth()">✅ Toggle Service Health</button>
+        </div>
+        
+        <div class="log-area" id="log">System Ready...</div>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const FAILURE_THRESHOLD = 3;
+        const RESET_TIMEOUT_MS = 5000; // 5 Seconds wait time
+
+        // --- STATE ---
+        let state = 'CLOSED'; // CLOSED, OPEN, HALF_OPEN
+        let failureCount = 0;
+        let isServiceHealthy = true;
+        let timerInterval = null;
+
+        // --- UI UPDATES ---
+        function updateUI() {
+            const cb = document.getElementById('cb');
+            const cbState = document.getElementById('cb-state');
+            const cbTimer = document.getElementById('cb-timer');
+            const cbIcon = document.getElementById('cb-icon');
+
+            // Reset Classes
+            cb.className = 'breaker';
+
+            if (state === 'CLOSED') {
+                cb.classList.add('closed');
+                cbState.innerText = "CLOSED";
+                cbIcon.innerText = "⚡";
+                cbTimer.innerText = `Failures: ${failureCount}/${FAILURE_THRESHOLD}`;
+            } 
+            else if (state === 'OPEN') {
+                cb.classList.add('open');
+                cbState.innerText = "OPEN";
+                cbIcon.innerText = "⛔";
+                // Timer text handled by countdown logic
+            } 
+            else if (state === 'HALF_OPEN') {
+                cb.classList.add('half-open');
+                cbState.innerText = "HALF-OPEN";
+                cbIcon.innerText = "⚠️";
+                cbTimer.innerText = "Next request is a Probe";
+            }
+        }
+
+        function toggleHealth() {
+            isServiceHealthy = !isServiceHealthy;
+            const svcBox = document.getElementById('svc-box');
+            const btn = document.getElementById('btn-health');
+            const svcText = document.getElementById('svc-text');
+
+            if (isServiceHealthy) {
+                svcBox.classList.remove('crashed');
+                svcText.innerHTML = "📦 Service<br>(Online)";
+                btn.classList.remove('dead');
+                btn.innerText = "✅ Service is Online";
+                log("INFO: Service recovered. It is now HEALTHY.");
+            } else {
+                svcBox.classList.add('crashed');
+                svcText.innerHTML = "💀 Service<br>(Crashed)";
+                btn.classList.add('dead');
+                btn.innerText = "❌ Service is Dead";
+                log("WARN: Service has CRASHED.", "log-err");
+            }
+        }
+
+        // --- CORE LOGIC ---
+        function sendRequest() {
+            if (state === 'OPEN') {
+                log("BLOCKED: Circuit is OPEN. Request rejected immediately.", "log-err");
+                return; // Fail Fast
+            }
+
+            // Animate Request
+            animateRequest(() => {
+                // HALF-OPEN LOGIC
+                if (state === 'HALF_OPEN') {
+                    log("PROBE: Sending test request to Service...", "log-warn");
+                    
+                    if (isServiceHealthy) {
+                        // SUCCESS: Close the circuit
+                        state = 'CLOSED';
+                        failureCount = 0;
+                        log("SUCCESS: Service response received! Circuit CLOSED.", "log-succ");
+                    } else {
+                        // FAILURE: Re-open the circuit
+                        state = 'OPEN';
+                        log("FAILURE: Service still dead. Circuit Re-OPENED.", "log-err");
+                        startOpenTimer();
+                    }
+                    updateUI();
+                    return;
+                }
+
+                // CLOSED LOGIC
+                if (isServiceHealthy) {
+                    log("SUCCESS: 200 OK - Data received.", "log-succ");
+                    failureCount = 0; // Reset consecutive failures on success
+                } else {
+                    failureCount++;
+                    log(`ERROR: 500 Server Error (Count: ${failureCount})`, "log-err");
+                    
+                    if (failureCount >= FAILURE_THRESHOLD) {
+                        tripCircuit();
+                    }
+                }
+                updateUI();
+            });
+        }
+
+        function tripCircuit() {
+            state = 'OPEN';
+            log("!!! THRESHOLD REACHED. Circuit TRIPPED to OPEN !!!", "log-err");
+            updateUI();
+            startOpenTimer();
+        }
+
+        function startOpenTimer() {
+            let timeLeft = RESET_TIMEOUT_MS / 1000;
+            const timerDisplay = document.getElementById('cb-timer');
+            
+            // Clear any existing timer
+            if(timerInterval) clearInterval(timerInterval);
+
+            timerDisplay.innerText = `Reset in ${timeLeft}s...`;
+
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                timerDisplay.innerText = `Reset in ${timeLeft}s...`;
+
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    state = 'HALF_OPEN';
+                    updateUI();
+                    log("TIMEOUT: Cooldown finished. Circuit switched to HALF-OPEN.", "log-warn");
+                }
+            }, 1000);
+        }
+
+        // --- ANIMATION ---
+        function animateRequest(callback) {
+            const dot = document.getElementById('dot');
+            const client = document.getElementById('client-box');
+            const cb = document.getElementById('cb');
+            const svc = document.getElementById('svc-box');
+
+            // 1. Client -> CB
+            moveDot(client, cb, () => {
+                // If Open, stop here
+                if (state === 'OPEN') {
+                    dot.style.display = 'none';
+                    return; 
+                }
+
+                // 2. CB -> Service
+                moveDot(cb, svc, () => {
+                    dot.style.display = 'none';
+                    callback();
+                });
+            });
+        }
+
+        function moveDot(fromEl, toEl, cb) {
+            const dot = document.getElementById('dot');
+            const f = fromEl.getBoundingClientRect();
+            const t = toEl.getBoundingClientRect();
+
+            dot.style.display = 'block';
+            dot.style.top = (f.top + f.height/2 - 7) + 'px';
+            dot.style.left = (f.left + f.width/2 - 7) + 'px';
+            dot.style.transition = 'none';
+            void dot.offsetWidth; // Force Reflow
+
+            dot.style.transition = 'all 0.4s linear';
+            dot.style.top = (t.top + t.height/2 - 7) + 'px';
+            dot.style.left = (t.left + t.width/2 - 7) + 'px';
+
+            setTimeout(cb, 400);
+        }
+
+        function log(msg, cls = "") {
+            const div = document.getElementById('log');
+            div.innerHTML = `<div class="${cls}">> ${msg}</div>` + div.innerHTML;
+        }
+
+        // Init
+        updateUI();
+
+    </script>
+</body>
+</html>
