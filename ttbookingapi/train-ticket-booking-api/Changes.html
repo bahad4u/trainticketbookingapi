@@ -4828,3 +4828,217 @@ HTTP/1.1 200 OK
     </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Retry Pattern Simulator</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #2c3e50; display: flex; flex-direction: column; align-items: center; padding: 20px; color: white; }
+        
+        .layout { display: flex; align-items: center; margin-top: 60px; width: 800px; justify-content: space-between; position: relative; height: 200px; }
+        
+        /* BOXES */
+        .box { width: 160px; height: 120px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; position: relative; box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: transform 0.2s; }
+        
+        .client-box { background: #34495e; border: 4px solid #2c3e50; z-index: 10; }
+        .server-box { background: #27ae60; border: 4px solid #219150; z-index: 10; transition: background 0.3s; }
+        .server-box.glitch { background: #e74c3c; border-color: #c0392b; animation: shake 0.5s; }
+
+        .status-badge { font-size: 11px; background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 4px; margin-top: 5px; }
+
+        /* PACKET */
+        .packet { width: 20px; height: 20px; border-radius: 50%; position: absolute; z-index: 100; display: none; box-shadow: 0 0 10px white; border: 2px solid white; transition: all 0.5s ease-in-out; }
+        .pkt-req { background: #3498db; }
+        .pkt-fail { background: #e74c3c; }
+        .pkt-ok { background: #2ecc71; }
+
+        /* CONTROLS */
+        .controls { background: white; padding: 20px; border-radius: 10px; margin-top: 50px; width: 600px; color: #333; text-align: center; }
+        
+        .btn-group { display: flex; justify-content: center; gap: 20px; margin-bottom: 15px; }
+        
+        button { padding: 12px 25px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; color: white; transition: 0.2s; font-size: 14px; }
+        .btn-transient { background: #f39c12; }
+        .btn-transient:hover { background: #d35400; }
+        
+        .btn-fail { background: #c0392b; }
+        .btn-fail:hover { background: #922b21; }
+
+        /* LOG */
+        .log-display { font-family: monospace; background: #eee; padding: 10px; border-radius: 5px; min-height: 100px; text-align: left; font-size: 12px; overflow-y: auto; color: #333; border: 1px solid #ccc; }
+        .log-attempt { color: #3498db; font-weight: bold; }
+        .log-err { color: #e74c3c; }
+        .log-success { color: #27ae60; font-weight: bold; }
+        .log-wait { color: #7f8c8d; font-style: italic; }
+
+        @keyframes shake { 0% { transform: translateX(0); } 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } 100% { transform: translateX(0); } }
+
+    </style>
+</head>
+<body>
+
+    <h1>Retry Pattern Simulator</h1>
+    <p>Handling transient failures with automatic retries and exponential backoff.</p>
+
+    <div class="layout">
+        
+        <div class="box client-box" id="client">
+            <div style="font-size:30px;">💻</div>
+            <div>Client App</div>
+            <div class="status-badge" id="client-status">Idle</div>
+        </div>
+
+        <div class="box server-box" id="server">
+            <div style="font-size:30px;">☁️</div>
+            <div id="server-txt">API Server</div>
+            <div class="status-badge" id="server-status">Online</div>
+        </div>
+
+    </div>
+
+    <div id="packet" class="packet"></div>
+
+    <div class="controls">
+        <div class="btn-group">
+            <button class="btn-transient" onclick="startRetryScenario('transient')">⚡ Simulate "Hiccup" (2 Fails, then OK)</button>
+            <button class="btn-fail" onclick="startRetryScenario('permanent')">❌ Simulate "Outage" (All Fail)</button>
+        </div>
+        
+        <div class="log-display" id="log">Waiting for action...</div>
+    </div>
+
+    <script>
+        const MAX_RETRIES = 3;
+        let attempt = 0;
+        let scenario = ''; // 'transient' or 'permanent'
+
+        function startRetryScenario(type) {
+            scenario = type;
+            attempt = 0;
+            document.getElementById('log').innerHTML = "--- New Request Sequence ---";
+            
+            // Start the loop
+            makeRequest();
+        }
+
+        function makeRequest() {
+            attempt++;
+            const client = document.getElementById('client');
+            const server = document.getElementById('server');
+            const pkt = document.getElementById('packet');
+            
+            log(`🚀 Attempt #${attempt}: Sending request...`, "log-attempt");
+            document.getElementById('client-status').innerText = `Trying (${attempt}/${MAX_RETRIES})...`;
+
+            // 1. Client -> Server
+            pkt.className = 'packet pkt-req';
+            pkt.style.display = 'block';
+            
+            // Get positions
+            const start = client.getBoundingClientRect();
+            const end = server.getBoundingClientRect();
+
+            pkt.style.top = (start.top + 50) + 'px';
+            pkt.style.left = (start.left + 50) + 'px';
+            pkt.offsetWidth; // Force reflow
+
+            pkt.style.transition = "all 0.5s ease-in";
+            pkt.style.top = (end.top + 50) + 'px';
+            pkt.style.left = (end.left + 50) + 'px';
+
+            setTimeout(() => {
+                // ARRIVED AT SERVER
+                
+                // Determine Outcome based on Scenario
+                let isSuccess = false;
+                
+                if (scenario === 'transient') {
+                    // Succeed only on 3rd attempt
+                    isSuccess = (attempt === 3);
+                } else {
+                    // Always fail
+                    isSuccess = false;
+                }
+
+                // Visual Reaction
+                if (isSuccess) {
+                    handleSuccess(server, pkt, client);
+                } else {
+                    handleFailure(server, pkt, client);
+                }
+
+            }, 500);
+        }
+
+        function handleSuccess(server, pkt, client) {
+            server.classList.remove('glitch');
+            pulse(server);
+            log("✅ Server: 200 OK. Processed successfully.", "log-success");
+
+            // Return trip
+            pkt.className = 'packet pkt-ok';
+            
+            const end = client.getBoundingClientRect();
+            pkt.style.left = (end.left + 50) + 'px';
+
+            setTimeout(() => {
+                pkt.style.display = 'none';
+                document.getElementById('client-status').innerText = "Success";
+                log("🎉 Client: Data received! Operation complete.", "log-success");
+            }, 500);
+        }
+
+        function handleFailure(server, pkt, client) {
+            // Fail Visuals
+            server.classList.add('glitch');
+            document.getElementById('server-status').innerText = "Busy / Error";
+            setTimeout(() => { server.classList.remove('glitch'); document.getElementById('server-status').innerText = "Online"; }, 500);
+
+            log(`❌ Server: 503 Service Unavailable.`, "log-err");
+
+            // Return Error Packet
+            pkt.className = 'packet pkt-fail';
+            const end = client.getBoundingClientRect();
+            pkt.style.left = (end.left + 50) + 'px';
+
+            setTimeout(() => {
+                pkt.style.display = 'none';
+                
+                // DECIDE: Retry or Give Up?
+                if (attempt < MAX_RETRIES) {
+                    const backoff = attempt * 1000; // Linear backoff for demo speed (1s, 2s)
+                    log(`⚠️ Client: Request failed. Waiting ${backoff/1000}s before retry...`, "log-wait");
+                    document.getElementById('client-status').innerText = `Waiting (${backoff/1000}s)...`;
+                    
+                    // Recursive Retry
+                    setTimeout(makeRequest, backoff);
+                } else {
+                    log("🛑 Client: Max retries reached. Giving up.", "log-err");
+                    document.getElementById('client-status').innerText = "Failed";
+                }
+            }, 500);
+        }
+
+        function pulse(el) {
+            el.style.transform = "scale(1.1)";
+            setTimeout(() => el.style.transform = "scale(1)", 200);
+        }
+
+        function log(msg, cls) {
+            const box = document.getElementById('log');
+            box.innerHTML += `<div class="${cls}">${msg}</div>`;
+            box.scrollTop = box.scrollHeight;
+        }
+
+    </script>
+</body>
+</html>
