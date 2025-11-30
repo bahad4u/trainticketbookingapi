@@ -67,3 +67,195 @@
     </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Circuit Breaker Pattern Demo</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f9; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        h1 { color: #333; }
+        .container { display: flex; align-items: center; justify-content: space-between; width: 800px; margin-top: 50px; }
+        
+        /* The Boxes */
+        .box { width: 150px; height: 100px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: all 0.3s; }
+        .client { background-color: #3498db; color: white; }
+        .service { background-color: #2ecc71; color: white; }
+        .service.dead { background-color: #e74c3c; } /* Red when dead */
+
+        /* The Circuit Breaker Symbol */
+        .breaker-container { position: relative; width: 200px; height: 120px; border: 3px dashed #bbb; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: white; }
+        .switch { font-size: 40px; font-weight: bold; }
+        .status-text { margin-top: 5px; font-size: 14px; font-weight: bold; color: #555; }
+        
+        .closed { color: #2ecc71; } /* Green */
+        .open { color: #e74c3c; }   /* Red */
+
+        /* Connection Lines */
+        .line { height: 4px; width: 50px; background-color: #bbb; }
+        
+        /* Controls */
+        .controls { margin-top: 50px; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; border: none; border-radius: 5px; margin: 0 10px; transition: 0.2s; }
+        .btn-req { background-color: #3498db; color: white; }
+        .btn-req:hover { background-color: #2980b9; }
+        .btn-kill { background-color: #e74c3c; color: white; }
+        .btn-kill:hover { background-color: #c0392b; }
+
+        /* Console Log */
+        #console { width: 800px; height: 150px; background: #222; color: #0f0; font-family: monospace; padding: 10px; margin-top: 20px; border-radius: 5px; overflow-y: scroll; font-size: 14px; }
+        .log-err { color: #ff5555; }
+        .log-warn { color: #ffff55; }
+    </style>
+</head>
+<body>
+
+    <h1>Circuit Breaker Dashboard</h1>
+
+    <div class="container">
+        <div class="box client">
+            <span>Client App</span>
+            <small>(User)</small>
+        </div>
+
+        <div class="line"></div>
+
+        <div class="breaker-container">
+            <div id="cb-icon" class="switch closed">● CLOSED</div>
+            <div id="cb-stats" class="status-text">Failures: 0/3</div>
+        </div>
+
+        <div class="line"></div>
+
+        <div id="service-box" class="box service">
+            <span>Product Service</span>
+            <small id="svc-status">Status: ONLINE</small>
+        </div>
+    </div>
+
+    <div class="controls">
+        <h3>Simulation Controls</h3>
+        <p>1. Make requests. 2. Kill the service. 3. Watch the breaker open.</p>
+        <button class="btn-req" onclick="makeRequest()">Send User Request</button>
+        <button class="btn-kill" onclick="toggleServiceHealth()">Toggle Service Health</button>
+        <button onclick="resetDemo()">Reset Demo</button>
+    </div>
+
+    <div id="console">System Ready...<br></div>
+
+    <script>
+        // State Variables
+        let isServiceHealthy = true;
+        let failureCount = 0;
+        let isCircuitOpen = false;
+        const FAILURE_THRESHOLD = 3;
+
+        // Visual Elements
+        const serviceBox = document.getElementById('service-box');
+        const svcStatus = document.getElementById('svc-status');
+        const cbIcon = document.getElementById('cb-icon');
+        const cbStats = document.getElementById('cb-stats');
+        const consoleLog = document.getElementById('console');
+
+        function log(msg, type = '') {
+            const span = `<span class="${type}">${new Date().toLocaleTimeString()} > ${msg}</span><br>`;
+            consoleLog.innerHTML = span + consoleLog.innerHTML;
+        }
+
+        function toggleServiceHealth() {
+            isServiceHealthy = !isServiceHealthy;
+            if (isServiceHealthy) {
+                serviceBox.classList.remove('dead');
+                serviceBox.classList.add('service');
+                svcStatus.innerText = "Status: ONLINE";
+                log("Service recovered. It is HEALTHY now.");
+            } else {
+                serviceBox.classList.remove('service');
+                serviceBox.classList.add('dead');
+                svcStatus.innerText = "Status: CRASHED";
+                log("Service has CRASHED.", 'log-err');
+            }
+        }
+
+        function makeRequest() {
+            // SCENARIO 1: Circuit is OPEN (Fail Fast)
+            if (isCircuitOpen) {
+                log("BLOCKED: Circuit is OPEN. Request not sent to service.", 'log-warn');
+                log("FALLBACK: Returning cached default data to user.");
+                return;
+            }
+
+            // SCENARIO 2: Service is Healthy (Success)
+            if (isServiceHealthy) {
+                log("SUCCESS: 200 OK - Data received from Product Service.");
+                failureCount = 0; // Reset failures on success
+                updateStats();
+            } 
+            // SCENARIO 3: Service is Dead (Failure)
+            else {
+                failureCount++;
+                log(`ERROR: 500 Server Error - Connection Timeout. (Failures: ${failureCount})`, 'log-err');
+                updateStats();
+
+                if (failureCount >= FAILURE_THRESHOLD) {
+                    tripCircuit();
+                }
+            }
+        }
+
+        function tripCircuit() {
+            isCircuitOpen = true;
+            cbIcon.innerText = "⊗ OPEN";
+            cbIcon.classList.remove('closed');
+            cbIcon.classList.add('open');
+            log("!!! THRESHOLD REACHED. CIRCUIT TRIPPED !!!", 'log-err');
+            
+            // Auto-reset simulation after 5 seconds
+            setTimeout(() => {
+                log("TIMEOUT: Testing connection (Half-Open state)...", 'log-warn');
+                if(isServiceHealthy) {
+                    resetCircuit();
+                } else {
+                     log("Check failed. Circuit staying OPEN.", 'log-err');
+                }
+            }, 8000);
+        }
+
+        function resetCircuit() {
+            isCircuitOpen = false;
+            failureCount = 0;
+            cbIcon.innerText = "● CLOSED";
+            cbIcon.classList.remove('open');
+            cbIcon.classList.add('closed');
+            updateStats();
+            log("CIRCUIT CLOSED. Traffic flowing normally.");
+        }
+
+        function updateStats() {
+            cbStats.innerText = `Failures: ${failureCount}/${FAILURE_THRESHOLD}`;
+        }
+        
+        function resetDemo() {
+            isServiceHealthy = true;
+            isCircuitOpen = false;
+            failureCount = 0;
+            serviceBox.classList.remove('dead');
+            serviceBox.classList.add('service');
+            svcStatus.innerText = "Status: ONLINE";
+            cbIcon.innerText = "● CLOSED";
+            cbIcon.classList.remove('open');
+            cbIcon.classList.add('closed');
+            updateStats();
+            consoleLog.innerHTML = "System Reset...<br>";
+        }
+    </script>
+</body>
+</html>
+
