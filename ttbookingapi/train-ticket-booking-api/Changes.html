@@ -5293,3 +5293,302 @@ HTTP/1.1 200 OK
     </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>External Configuration: Hot Reload Demo</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f6f7; display: flex; flex-direction: column; align-items: center; padding: 20px; color: #333; }
+        
+        .layout { display: flex; gap: 50px; margin-top: 40px; align-items: flex-start; width: 900px; justify-content: center; }
+        
+        /* COLUMN STYLES */
+        .col { display: flex; flex-direction: column; align-items: center; width: 400px; }
+        .col-title { font-weight: bold; margin-bottom: 15px; font-size: 18px; color: #555; }
+
+        /* APP CONTAINER */
+        .app-container { 
+            width: 320px; 
+            height: 450px; 
+            border: 10px solid #333; 
+            border-radius: 20px; 
+            background: white; 
+            position: relative; 
+            overflow: hidden; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2); 
+            display: flex;
+            flex-direction: column;
+            transition: all 0.5s;
+        }
+
+        /* App Internal UI */
+        .app-header { padding: 20px; background: #3498db; color: white; font-weight: bold; font-size: 20px; transition: 0.5s; display: flex; justify-content: space-between; align-items: center; }
+        .app-body { padding: 20px; flex-grow: 1; transition: 0.5s; position: relative; }
+        
+        .promo-banner { background: #e74c3c; color: white; padding: 10px; text-align: center; font-weight: bold; display: none; margin-top: 10px; border-radius: 5px; animation: slideDown 0.5s; }
+        
+        .feature-box { border: 2px dashed #ccc; padding: 20px; margin-top: 20px; border-radius: 8px; text-align: center; color: #aaa; transition: all 0.3s; }
+
+        /* LIVE SIGNAL INDICATOR */
+        .signal-receiver { width: 10px; height: 10px; background: #ccc; border-radius: 50%; display: inline-block; box-shadow: 0 0 5px rgba(0,0,0,0.2); }
+        .signal-receiver.active { background: #2ecc71; box-shadow: 0 0 15px #2ecc71; animation: blink 0.5s 3; }
+
+        /* TOAST NOTIFICATION */
+        .toast { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: white; padding: 8px 15px; border-radius: 20px; font-size: 12px; opacity: 0; transition: opacity 0.5s; width: 80%; text-align: center; pointer-events: none; }
+        .toast.show { opacity: 1; }
+
+        /* CONFIG EDITOR */
+        .config-editor {
+            width: 100%;
+            height: 350px;
+            background: #2c3e50;
+            color: #2ecc71;
+            font-family: 'Consolas', monospace;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            font-size: 14px;
+        }
+
+        .json-key { color: #f1c40f; }
+        .json-val { color: #e67e22; font-weight: bold; cursor: pointer; text-decoration: underline; }
+        .json-val:hover { color: white; }
+        
+        /* CONTROLS */
+        .controls { margin-top: 30px; text-align: center; }
+        button { padding: 12px 30px; cursor: pointer; border: none; border-radius: 30px; font-weight: bold; background: #27ae60; color: white; transition: 0.2s; font-size: 16px; box-shadow: 0 4px 10px rgba(46, 204, 113, 0.4); display: flex; align-items: center; gap: 10px; margin: 0 auto; }
+        button:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(46, 204, 113, 0.6); }
+        button:active { transform: translateY(0); }
+
+        /* THEMES */
+        .theme-dark .app-container { background: #222; }
+        .theme-dark .app-header { background: #444; }
+        .theme-dark .app-body { color: #ddd; }
+        .theme-dark .feature-box { border-color: #555; color: #555; }
+
+        /* ANIMATIONS */
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.2; } 100% { opacity: 1; } }
+        @keyframes flash { 0% { background-color: rgba(46, 204, 113, 0.5); } 100% { background-color: transparent; } }
+        
+        .flash-update { animation: flash 1s; }
+
+    </style>
+</head>
+<body>
+
+    <h1>External Config: Hot Reload Demo</h1>
+    <p>Using <b>@RefreshScope</b> to update settings instantly without restarting the server.</p>
+
+    <div class="layout">
+        
+        <div class="col">
+            <div class="col-title">📱 The Application (Running)</div>
+            <div class="app-container" id="app">
+                
+                <div class="app-header" id="app-header">
+                    <span id="app-title">My Shop</span>
+                    <div class="signal-receiver" id="signal" title="Config Watcher"></div>
+                </div>
+                
+                <div class="app-body">
+                    <p>Welcome, User!</p>
+                    <div class="feature-box" id="new-feature">
+                        (New Feature Disabled)
+                    </div>
+                    <div class="promo-banner" id="banner">
+                        ⚠️ MAINTENANCE MODE
+                    </div>
+                    
+                    <div class="toast" id="toast">Configuration Refreshed!</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col">
+            <div class="col-title">⚙️ Config Server (JSON)</div>
+            <div class="config-editor">
+                <div style="color:#777; margin-bottom:10px;">// application.json (Git Repo)</div>
+                <div>{</div>
+                <div style="padding-left: 20px;">
+                    <span class="json-key">"app_name":</span> 
+                    "<span class="json-val" onclick="editVal('name')">My Shop</span>",
+                </div>
+                <div style="padding-left: 20px;">
+                    <span class="json-key">"theme_mode":</span> 
+                    "<span class="json-val" id="val-theme" onclick="toggleTheme()">light</span>",
+                </div>
+                <div style="padding-left: 20px;">
+                    <span class="json-key">"feature_x_enabled":</span> 
+                    <span class="json-val" id="val-feat" onclick="toggleFeat()">false</span>,
+                </div>
+                <div style="padding-left: 20px;">
+                    <span class="json-key">"show_banner":</span> 
+                    <span class="json-val" id="val-banner" onclick="toggleBanner()">false</span>
+                </div>
+                <div>}</div>
+                
+                <div style="margin-top: auto; color: #fff; font-size: 12px; border-top: 1px solid #444; padding-top: 10px;">
+                    🖱️ Click values to edit them.
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="controls">
+        <button onclick="triggerRefresh()">
+            <span>🔄</span> Trigger Hot Reload (POST /refresh)
+        </button>
+    </div>
+
+    <script>
+        // State
+        let config = {
+            appName: "My Shop",
+            theme: "light",
+            featureEnabled: false,
+            showBanner: false
+        };
+
+        // UI EDITORS
+        function toggleTheme() {
+            config.theme = config.theme === 'light' ? 'dark' : 'light';
+            document.getElementById('val-theme').innerText = config.theme;
+            pulseConfig();
+        }
+
+        function toggleFeat() {
+            config.featureEnabled = !config.featureEnabled;
+            document.getElementById('val-feat').innerText = config.featureEnabled;
+            pulseConfig();
+        }
+
+        function toggleBanner() {
+            config.showBanner = !config.showBanner;
+            document.getElementById('val-banner').innerText = config.showBanner;
+            pulseConfig();
+        }
+
+        function editVal(key) {
+            if(key === 'name') {
+                const newName = prompt("Enter new App Name:", config.appName);
+                if(newName) {
+                    config.appName = newName;
+                    event.target.innerText = newName;
+                    pulseConfig();
+                }
+            }
+        }
+
+        function pulseConfig() {
+            const editor = document.querySelector('.config-editor');
+            editor.style.boxShadow = "0 0 15px #f1c40f";
+            setTimeout(() => editor.style.boxShadow = "0 5px 15px rgba(0,0,0,0.3)", 300);
+        }
+
+        // HOT RELOAD LOGIC
+        function triggerRefresh() {
+            const signal = document.getElementById('signal');
+            const toast = document.getElementById('toast');
+            
+            // Visual feedback: Signal LED flashes green
+            signal.classList.add('active');
+            
+            // Simulate brief network delay for the /refresh actuator call
+            setTimeout(() => {
+                applyConfig();
+                signal.classList.remove('active');
+                
+                // Show Toast
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 2000);
+                
+            }, 500); 
+        }
+
+        function applyConfig() {
+            const app = document.getElementById('app');
+            const header = document.getElementById('app-header');
+            const title = document.getElementById('app-title');
+            const feat = document.getElementById('new-feature');
+            const banner = document.getElementById('banner');
+
+            // 1. Update Name
+            if (title.innerText !== config.appName) {
+                title.innerText = config.appName;
+                flashElement(header);
+            }
+
+            // 2. Update Theme
+            if (config.theme === 'dark') {
+                if (!document.body.classList.contains('theme-dark')) {
+                    document.body.classList.add('theme-dark');
+                    app.style.backgroundColor = "#222";
+                    header.style.backgroundColor = "#444";
+                    document.querySelector('.app-body').style.color = "#ddd";
+                    flashElement(app);
+                }
+            } else {
+                if (document.body.classList.contains('theme-dark')) {
+                    document.body.classList.remove('theme-dark');
+                    app.style.backgroundColor = "white";
+                    header.style.backgroundColor = "#3498db";
+                    document.querySelector('.app-body').style.color = "#333";
+                    flashElement(app);
+                }
+            }
+
+            // 3. Update Feature
+            const isFeatActive = feat.innerText.includes("Active");
+            if (config.featureEnabled !== isFeatActive) {
+                if (config.featureEnabled) {
+                    feat.innerText = "✨ AI RECOMMENDATIONS (Active)";
+                    feat.style.borderColor = "#27ae60";
+                    feat.style.color = "#27ae60";
+                    feat.style.fontWeight = "bold";
+                    feat.style.backgroundColor = "rgba(39, 174, 96, 0.1)";
+                } else {
+                    feat.innerText = "(New Feature Disabled)";
+                    feat.style.borderColor = "#ccc";
+                    feat.style.color = "#aaa";
+                    feat.style.fontWeight = "normal";
+                    feat.style.backgroundColor = "transparent";
+                }
+                flashElement(feat);
+            }
+
+            // 4. Update Banner
+            const isBannerVisible = banner.style.display === "block";
+            if (config.showBanner !== isBannerVisible) {
+                if (config.showBanner) {
+                    banner.style.display = "block";
+                } else {
+                    banner.style.display = "none";
+                }
+            }
+        }
+
+        function flashElement(el) {
+            el.classList.remove('flash-update');
+            void el.offsetWidth; // Trigger reflow
+            el.classList.add('flash-update');
+        }
+
+        // Init
+        applyConfig();
+
+    </script>
+</body>
+</html>
