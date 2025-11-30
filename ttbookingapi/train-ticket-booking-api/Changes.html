@@ -2734,3 +2734,259 @@
     </script>
 </body>
 </html>
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Saga Pattern Simulator</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #2c3e50; display: flex; flex-direction: column; align-items: center; padding: 20px; color: white; }
+        
+        .layout { display: flex; flex-direction: column; align-items: center; margin-top: 40px; width: 900px; }
+        
+        /* ORCHESTRATOR */
+        .orchestrator { width: 120px; height: 120px; background: #f39c12; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; box-shadow: 0 0 20px rgba(243, 156, 18, 0.4); z-index: 10; margin-bottom: 40px; border: 4px solid #e67e22; font-size: 12px; text-align: center; }
+        
+        /* SERVICE ROW */
+        .service-row { display: flex; gap: 40px; width: 100%; justify-content: center; position: relative; }
+        
+        .service-box { width: 160px; height: 120px; background: #34495e; border-radius: 8px; border: 3px solid #7f8c8d; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: all 0.5s; position: relative; }
+        
+        .service-icon { font-size: 30px; margin-bottom: 5px; }
+        .service-name { font-weight: bold; font-size: 14px; }
+        .status-badge { margin-top: 8px; font-size: 11px; padding: 4px 8px; border-radius: 4px; background: #222; min-width: 80px; text-align: center; }
+
+        /* STATES */
+        .service-box.success { border-color: #2ecc71; box-shadow: 0 0 15px rgba(46, 204, 113, 0.5); }
+        .service-box.success .status-badge { background: #2ecc71; color: white; }
+
+        .service-box.error { border-color: #e74c3c; box-shadow: 0 0 15px rgba(231, 76, 60, 0.5); }
+        .service-box.error .status-badge { background: #e74c3c; color: white; }
+
+        .service-box.compensated { border-color: #f39c12; background: #4a3b2a; }
+        .service-box.compensated .status-badge { background: #f39c12; color: #222; font-weight: bold; }
+
+        /* CONNECTIONS */
+        .connector-line { position: absolute; height: 4px; background: #555; top: 50%; z-index: 0; width: 80%; transform: translateY(-50%); }
+
+        /* ANIMATION DOTS */
+        .dot { width: 16px; height: 16px; border-radius: 50%; position: absolute; z-index: 100; display: none; transition: all 0.5s linear; }
+        .dot-forward { background: #2ecc71; box-shadow: 0 0 10px #2ecc71; }
+        .dot-backward { background: #e74c3c; box-shadow: 0 0 10px #e74c3c; }
+
+        /* CONTROLS */
+        .controls { background: white; padding: 20px; border-radius: 10px; margin-top: 50px; width: 700px; color: #333; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        
+        .btn-group { display: flex; justify-content: center; gap: 15px; margin-bottom: 15px; }
+        
+        button { padding: 12px 20px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; font-size: 14px; transition: 0.2s; color: white; }
+        
+        .btn-success { background: #27ae60; }
+        .btn-success:hover { background: #219150; }
+
+        .btn-fail-pay { background: #c0392b; }
+        .btn-fail-inv { background: #e67e22; }
+        .btn-fail-dlv { background: #8e44ad; }
+
+        /* LOG */
+        .log-area { font-family: monospace; background: #eee; padding: 10px; border-radius: 5px; height: 120px; overflow-y: auto; text-align: left; font-size: 12px; border: 1px solid #ccc; color: #333; }
+        .log-step { color: #2ecc71; }
+        .log-err { color: #e74c3c; font-weight: bold; }
+        .log-undo { color: #f39c12; font-weight: bold; }
+
+    </style>
+</head>
+<body>
+
+    <h1>Saga Pattern Simulator</h1>
+    <p>Managing Distributed Transactions using Compensation (Rollback)</p>
+
+    <div class="layout">
+        
+        <div class="orchestrator" id="orch">
+            <span>SAGA<br>ORCHESTRATOR</span>
+        </div>
+
+        <div class="service-row">
+            <div class="connector-line"></div>
+
+            <div class="service-box" id="svc-order">
+                <div class="service-icon">📝</div>
+                <div class="service-name">Order Service</div>
+                <div class="status-badge" id="status-order">Pending</div>
+            </div>
+
+            <div class="service-box" id="svc-pay">
+                <div class="service-icon">💳</div>
+                <div class="service-name">Payment</div>
+                <div class="status-badge" id="status-pay">Pending</div>
+            </div>
+
+            <div class="service-box" id="svc-inv">
+                <div class="service-icon">📦</div>
+                <div class="service-name">Inventory</div>
+                <div class="status-badge" id="status-inv">Pending</div>
+            </div>
+
+            <div class="service-box" id="svc-ship">
+                <div class="service-icon">🚚</div>
+                <div class="service-name">Delivery</div>
+                <div class="status-badge" id="status-ship">Pending</div>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="dot" class="dot"></div>
+
+    <div class="controls">
+        <h3>Simulate User Journey</h3>
+        <div class="btn-group">
+            <button class="btn-success" onclick="runSaga('success')">✅ Happy Path (Success)</button>
+            <button class="btn-fail-inv" onclick="runSaga('fail-inv')">⚠️ Fail at Inventory (No Stock)</button>
+            <button class="btn-fail-dlv" onclick="runSaga('fail-dlv')">🛑 Fail at Delivery (Bad Address)</button>
+        </div>
+        
+        <div class="log-area" id="log">System Ready...</div>
+    </div>
+
+    <script>
+        const services = ['order', 'pay', 'inv', 'ship'];
+        let failAt = '';
+        let isCompensating = false;
+
+        function runSaga(scenario) {
+            // Reset
+            failAt = scenario;
+            isCompensating = false;
+            document.getElementById('log').innerHTML = "Starting New Transaction...";
+            services.forEach(s => {
+                const box = document.getElementById(`svc-${s}`);
+                const badge = document.getElementById(`status-${s}`);
+                box.className = 'service-box';
+                badge.innerText = 'Pending';
+            });
+
+            // Start Step 1
+            log("Saga Started: Transaction ID #101 created.");
+            executeStep(0);
+        }
+
+        function executeStep(index) {
+            if (index >= services.length) {
+                log("🎉 SAGA COMPLETED SUCCESSFULLY!", "log-step");
+                return;
+            }
+
+            const svcId = services[index];
+            const box = document.getElementById(`svc-${svcId}`);
+            const badge = document.getElementById(`status-${svcId}`);
+            const orchestrator = document.getElementById('orch');
+
+            // Animate Packet (Orchestrator -> Service)
+            moveDot(orchestrator, box, 'dot-forward', () => {
+                
+                // CHECK FOR FAILURE SIMULATION
+                if (
+                    (failAt === 'fail-inv' && svcId === 'inv') || 
+                    (failAt === 'fail-dlv' && svcId === 'ship')
+                ) {
+                    // FAILURE!
+                    box.classList.add('error');
+                    badge.innerText = "FAILED";
+                    log(`❌ ERROR at ${getServiceName(svcId)}. Triggering Rollback...`, "log-err");
+                    
+                    setTimeout(() => startCompensation(index - 1), 1000);
+                    return;
+                }
+
+                // SUCCESS
+                box.classList.add('success');
+                badge.innerText = getActionName(svcId);
+                log(`✅ ${getServiceName(svcId)}: Success.`, "log-step");
+
+                // Move to next step
+                setTimeout(() => executeStep(index + 1), 800);
+            });
+        }
+
+        function startCompensation(index) {
+            isCompensating = true;
+            log("🔄 ROLLBACK STARTED: Undoing previous steps...", "log-undo");
+            compensateStep(index);
+        }
+
+        function compensateStep(index) {
+            if (index < 0) {
+                log("🛑 ROLLBACK COMPLETE: System state is consistent.", "log-undo");
+                document.getElementById('svc-order').classList.add('compensated');
+                document.getElementById('status-order').innerText = "CANCELLED";
+                return;
+            }
+
+            const svcId = services[index];
+            const box = document.getElementById(`svc-${svcId}`);
+            const badge = document.getElementById(`status-${svcId}`);
+            const orchestrator = document.getElementById('orch');
+
+            // Animate Packet (Orchestrator -> Service) -> RED DOT
+            moveDot(orchestrator, box, 'dot-backward', () => {
+                
+                box.classList.remove('success');
+                box.classList.add('compensated');
+                badge.innerText = getCompensateName(svcId);
+                log(`↩️ COMPENSATING ${getServiceName(svcId)}: ${getCompensateName(svcId)}`, "log-undo");
+
+                // Move backwards
+                setTimeout(() => compensateStep(index - 1), 1000);
+            });
+        }
+
+        // --- UTILS ---
+        function getServiceName(id) {
+            const map = { 'order': 'Order Svc', 'pay': 'Payment Svc', 'inv': 'Inventory Svc', 'ship': 'Delivery Svc' };
+            return map[id];
+        }
+
+        function getActionName(id) {
+            const map = { 'order': 'CREATED', 'pay': 'CHARGED', 'inv': 'RESERVED', 'ship': 'SCHEDULED' };
+            return map[id];
+        }
+
+        function getCompensateName(id) {
+            const map = { 'order': 'CANCELLED', 'pay': 'REFUNDED', 'inv': 'RESTOCKED', 'ship': 'CANCELLED' };
+            return map[id];
+        }
+
+        function moveDot(fromEl, toEl, dotClass, callback) {
+            const dot = document.getElementById('dot');
+            const f = fromEl.getBoundingClientRect();
+            const t = toEl.getBoundingClientRect();
+
+            dot.className = `dot ${dotClass}`;
+            dot.style.display = 'block';
+            dot.style.top = (f.top + f.height/2 - 8) + 'px';
+            dot.style.left = (f.left + f.width/2 - 8) + 'px';
+            dot.style.transition = 'none';
+            void dot.offsetWidth;
+
+            dot.style.transition = 'all 0.6s ease-in-out';
+            dot.style.top = (t.top + t.height/2 - 8) + 'px';
+            dot.style.left = (t.left + t.width/2 - 8) + 'px';
+
+            setTimeout(() => {
+                dot.style.display = 'none';
+                callback();
+            }, 600);
+        }
+
+        function log(msg, cls="") {
+            const div = document.getElementById('log');
+            div.innerHTML = `<div class="${cls}">${msg}</div>` + div.innerHTML;
+        }
+    </script>
+</body>
+</html>
