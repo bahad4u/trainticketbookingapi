@@ -1865,3 +1865,286 @@
     </script>
 </body>
 </html>
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Service Registry: 3-Node Load Balancing Demo</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f6f7; display: flex; flex-direction: column; align-items: center; padding: 20px; color: #333; }
+        
+        .layout { display: flex; gap: 40px; margin-top: 30px; align-items: flex-start; width: 950px; justify-content: center; }
+        
+        /* BOX STYLES */
+        .box { padding: 15px; border-radius: 8px; text-align: center; position: relative; box-shadow: 0 4px 10px rgba(0,0,0,0.1); transition: all 0.3s; }
+        
+        /* CLIENT */
+        .client-box { width: 180px; background: #2c3e50; color: white; border: 4px solid #1a252f; min-height: 200px; display: flex; flex-direction: column; justify-content: center; }
+        .client-screen { background: #000; color: #0f0; margin-top: 10px; padding: 8px; font-family: monospace; font-size: 11px; height: 100px; overflow: hidden; border-radius: 4px; text-align: left; border: 1px solid #555; }
+
+        /* REGISTRY (EUREKA) */
+        .registry-box { width: 260px; background: #8e44ad; color: white; border: 4px solid #6c3483; min-height: 250px; z-index: 10; }
+        .registry-title { font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px; margin-bottom: 10px; }
+        
+        .registry-table { width: 100%; font-size: 11px; border-collapse: collapse; color: white; }
+        .registry-table th { text-align: left; border-bottom: 1px solid rgba(255,255,255,0.2); padding: 4px; }
+        .registry-table td { padding: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .status-up { color: #2ecc71; font-weight: bold; }
+        
+        /* CLOUD ZONE (Services) */
+        .cloud-zone { width: 280px; min-height: 350px; border: 3px dashed #bdc3c7; border-radius: 15px; padding: 15px; display: flex; flex-direction: column; gap: 15px; align-items: center; position: relative; background: rgba(255,255,255,0.5); }
+        .cloud-label { font-weight: bold; color: #7f8c8d; font-size: 14px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px; }
+
+        /* Service Slots */
+        .service-slot { width: 240px; height: 60px; border: 2px dashed #ddd; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #ccc; font-weight: bold; font-size: 12px; position: relative; }
+        
+        .service-instance { width: 100%; height: 100%; background: #27ae60; color: white; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; padding: 0 15px; box-sizing: border-box; font-size: 13px; position: absolute; top: 0; left: 0; cursor: pointer; border: 2px solid #219150; box-shadow: 0 4px 6px rgba(0,0,0,0.1); animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .service-instance.dead { display: none; } /* Simplified for this demo, usually we animate out */
+        
+        .instance-badge { background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; font-size: 10px; }
+
+        /* ANIMATION DOTS */
+        .dot { width: 14px; height: 14px; border-radius: 50%; position: absolute; z-index: 100; display: none; border: 2px solid white; }
+        .dot-reg { background: #f1c40f; box-shadow: 0 0 10px #f1c40f; } 
+        .dot-req { background: #3498db; box-shadow: 0 0 10px #3498db; } 
+
+        /* CONTROLS */
+        .controls { background: white; padding: 20px; border-radius: 10px; margin-top: 30px; width: 700px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); text-align: center; }
+        .control-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        .control-label { font-weight: bold; color: #555; }
+        
+        .toggle-group { display: flex; gap: 10px; }
+        
+        /* Toggle Switches */
+        .toggle-btn { padding: 8px 12px; border: 1px solid #ccc; background: #eee; cursor: pointer; border-radius: 4px; font-size: 12px; transition: 0.2s; color: #777; }
+        .toggle-btn:hover { background: #ddd; }
+        .toggle-btn.on { background: #27ae60; color: white; border-color: #219150; }
+        .toggle-btn.off { background: #e74c3c; color: white; border-color: #c0392b; }
+
+        .btn-call { background: #34495e; color: white; font-size: 16px; padding: 12px 30px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.2s; }
+        .btn-call:hover { background: #2c3e50; transform: translateY(-2px); }
+        .btn-call:active { transform: translateY(0); }
+
+        /* LOG */
+        .log-display { font-family: monospace; color: #555; font-size: 13px; margin-top: 5px; min-height: 20px; }
+
+        @keyframes popIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); box-shadow: 0 0 15px white; } 100% { transform: scale(1); } }
+        .pulse-anim { animation: pulse 0.3s ease-in-out; }
+
+    </style>
+</head>
+<body>
+
+    <h1>Registry & Load Balancing Demo</h1>
+    <p>Managing multiple instances of the same service.</p>
+
+    <div class="layout">
+        
+        <div class="client-box" id="client">
+            <div>📱 Client App</div>
+            <div class="client-screen" id="client-log">
+                > System Ready.
+            </div>
+        </div>
+
+        <div class="registry-box" id="registry">
+            <div class="registry-title">📒 Service Registry</div>
+            <table class="registry-table">
+                <thead>
+                    <tr><th>Service ID</th><th>Address</th><th>Status</th></tr>
+                </thead>
+                <tbody id="reg-body">
+                    <tr><td colspan="3" style="text-align:center; padding:20px; opacity:0.6;">Empty...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="cloud-zone">
+            <div class="cloud-label">☁️ Service Cluster</div>
+            
+            <div class="service-slot">
+                <span style="opacity:0.3">Slot 1 (Port 8001)</span>
+                <div id="svc-1" class="service-instance" style="display:none;">
+                    <span>📦 Inventory</span>
+                    <span class="instance-badge">8001</span>
+                </div>
+            </div>
+
+            <div class="service-slot">
+                <span style="opacity:0.3">Slot 2 (Port 8002)</span>
+                <div id="svc-2" class="service-instance" style="display:none;">
+                    <span>📦 Inventory</span>
+                    <span class="instance-badge">8002</span>
+                </div>
+            </div>
+
+            <div class="service-slot">
+                <span style="opacity:0.3">Slot 3 (Port 8003)</span>
+                <div id="svc-3" class="service-instance" style="display:none;">
+                    <span>📦 Inventory</span>
+                    <span class="instance-badge">8003</span>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <div id="dot" class="dot"></div>
+
+    <div class="controls">
+        
+        <div class="control-row">
+            <div class="control-label">Manage Instances:</div>
+            <div class="toggle-group">
+                <button id="btn-1" class="toggle-btn" onclick="toggleService(1)">Start Node 1</button>
+                <button id="btn-2" class="toggle-btn" onclick="toggleService(2)">Start Node 2</button>
+                <button id="btn-3" class="toggle-btn" onclick="toggleService(3)">Start Node 3</button>
+            </div>
+        </div>
+
+        <button class="btn-call" onclick="clientCall()">📞 Make Client Request</button>
+        <div class="log-display" id="main-log">Waiting for user input...</div>
+    </div>
+
+    <script>
+        // State
+        const services = {
+            1: { active: false, ip: '10.0.0.1', port: 8001 },
+            2: { active: false, ip: '10.0.0.2', port: 8002 },
+            3: { active: false, ip: '10.0.0.3', port: 8003 }
+        };
+
+        function toggleService(id) {
+            const svc = services[id];
+            const btn = document.getElementById(`btn-${id}`);
+            const el = document.getElementById(`svc-${id}`);
+            const regBox = document.getElementById('registry');
+
+            if (!svc.active) {
+                // START SERVICE
+                svc.active = true;
+                el.style.display = 'flex'; // Show Box
+                btn.innerText = `Stop Node ${id}`;
+                btn.className = "toggle-btn on";
+                
+                // Animate Registration
+                log(`🚀 Starting Service Node ${id}...`);
+                animatePacket(el, regBox, 'dot-reg', () => {
+                    updateRegistryUI();
+                    log(`✅ Node ${id} registered at ${svc.ip}:${svc.port}`);
+                });
+
+            } else {
+                // STOP SERVICE
+                svc.active = false;
+                el.style.display = 'none'; // Hide Box
+                btn.innerText = `Start Node ${id}`;
+                btn.className = "toggle-btn"; // Reset to gray
+                
+                updateRegistryUI();
+                log(`🛑 Node ${id} stopped. Removed from Registry.`);
+            }
+        }
+
+        function updateRegistryUI() {
+            const tbody = document.getElementById('reg-body');
+            tbody.innerHTML = "";
+            
+            const activeSvcs = Object.values(services).filter(s => s.active);
+
+            if (activeSvcs.length === 0) {
+                tbody.innerHTML = "<tr><td colspan='3' style='text-align:center; padding:20px; opacity:0.6;'>Empty...</td></tr>";
+                return;
+            }
+
+            activeSvcs.forEach(s => {
+                const row = `<tr><td>INVENTORY</td><td>:${s.port}</td><td class="status-up">UP</td></tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+
+        function clientCall() {
+            const clientLog = document.getElementById('client-log');
+            const clientBox = document.getElementById('client');
+            const registryBox = document.getElementById('registry');
+            
+            log("🔎 Client Request initiated...");
+            clientLog.innerHTML += "<br>> Calling Inventory...";
+            clientLog.scrollTop = clientLog.scrollHeight; // Auto-scroll
+
+            // 1. Client -> Registry
+            animatePacket(clientBox, registryBox, 'dot-req', () => {
+                
+                // Get Active Services
+                const activeSvcs = Object.values(services).filter(s => s.active);
+
+                if (activeSvcs.length === 0) {
+                    clientLog.innerHTML += "<br>> <span style='color:red'>ERR: Service Unavailable</span>";
+                    log("❌ Call Failed: No active instances found in Registry.");
+                    return;
+                }
+
+                // 2. Load Balancing Logic (Random)
+                const target = activeSvcs[Math.floor(Math.random() * activeSvcs.length)];
+                const targetEl = document.getElementById(`svc-${Object.keys(services).find(key => services[key] === target)}`);
+
+                clientLog.innerHTML += `<br>> Registry: Try :${target.port}`;
+                clientLog.scrollTop = clientLog.scrollHeight;
+
+                // 3. Client -> Service Instance
+                setTimeout(() => {
+                    log(`🔀 Load Balancer routing to Node Port ${target.port}...`);
+                    animatePacket(clientBox, targetEl, 'dot-req', () => {
+                        // Success Animation
+                        targetEl.classList.add('pulse-anim');
+                        setTimeout(() => targetEl.classList.remove('pulse-anim'), 300);
+                        
+                        clientLog.innerHTML += `<br>> <span style='color:#0f0'>SUCCESS: Data from :${target.port}</span>`;
+                        clientLog.scrollTop = clientLog.scrollHeight;
+                        log("✅ Response received successfully.");
+                    });
+                }, 400);
+            });
+        }
+
+        // --- ANIMATION UTILS ---
+        function animatePacket(fromEl, toEl, dotClass, callback) {
+            const dot = document.getElementById('dot');
+            dot.className = `dot ${dotClass}`;
+            dot.style.display = 'block';
+
+            const fromRect = fromEl.getBoundingClientRect();
+            const toRect = toEl.getBoundingClientRect();
+
+            // Start
+            dot.style.top = (fromRect.top + fromRect.height/2 - 7) + 'px';
+            dot.style.left = (fromRect.left + fromRect.width/2 - 7) + 'px';
+            dot.style.transition = 'none';
+            
+            void dot.offsetWidth; // Force Reflow
+
+            // End
+            dot.style.transition = 'all 0.6s ease-in-out';
+            dot.style.top = (toRect.top + toRect.height/2 - 7) + 'px';
+            dot.style.left = (toRect.left + toRect.width/2 - 7) + 'px';
+
+            setTimeout(() => {
+                dot.style.display = 'none';
+                if(callback) callback();
+            }, 600);
+        }
+
+        function log(msg) {
+            document.getElementById('main-log').innerText = msg;
+        }
+    </script>
+</body>
+</html>
