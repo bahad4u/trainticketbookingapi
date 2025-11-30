@@ -1591,3 +1591,277 @@
 </body>
 </html>
 
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Service Registry Pattern Demo</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f0f3f4; display: flex; flex-direction: column; align-items: center; padding: 20px; color: #333; }
+        
+        .layout { display: flex; gap: 60px; margin-top: 40px; align-items: flex-start; width: 900px; justify-content: center; }
+        
+        /* BOX STYLES */
+        .box { padding: 15px; border-radius: 8px; text-align: center; position: relative; box-shadow: 0 4px 10px rgba(0,0,0,0.1); transition: all 0.3s; }
+        
+        /* CLIENT */
+        .client-box { width: 180px; background: #34495e; color: white; border: 4px solid #2c3e50; min-height: 150px; display: flex; flex-direction: column; justify-content: center; }
+        .client-screen { background: white; color: #333; margin-top: 10px; padding: 5px; font-family: monospace; font-size: 11px; height: 60px; overflow: hidden; border-radius: 4px; text-align: left; }
+
+        /* REGISTRY (EUREKA) */
+        .registry-box { width: 280px; background: #8e44ad; color: white; border: 4px solid #6c3483; min-height: 200px; z-index: 10; }
+        .registry-title { font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px; margin-bottom: 10px; }
+        
+        .registry-table { width: 100%; font-size: 12px; border-collapse: collapse; color: white; }
+        .registry-table th { text-align: left; border-bottom: 1px solid rgba(255,255,255,0.2); padding: 4px; }
+        .registry-table td { padding: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .status-up { color: #2ecc71; font-weight: bold; }
+        
+        /* CLOUD ZONE (Services) */
+        .cloud-zone { width: 250px; min-height: 300px; border: 3px dashed #bdc3c7; border-radius: 15px; padding: 10px; display: flex; flex-direction: column; gap: 10px; align-items: center; position: relative; background: rgba(255,255,255,0.5); }
+        .cloud-label { font-weight: bold; color: #7f8c8d; font-size: 14px; margin-bottom: 5px; }
+
+        .service-instance { width: 200px; padding: 10px; background: #27ae60; color: white; border-radius: 6px; font-size: 13px; position: relative; animation: popIn 0.5s; cursor: pointer; border: 2px solid #2ecc71; }
+        .service-instance:hover { transform: scale(1.02); }
+        .service-instance.dead { background: #c0392b; border-color: #e74c3c; animation: shake 0.5s; }
+        
+        .svc-details { font-size: 10px; opacity: 0.8; margin-top: 2px; }
+
+        /* ANIMATION DOTS */
+        .dot { width: 12px; height: 12px; border-radius: 50%; position: absolute; z-index: 100; display: none; }
+        .dot-reg { background: #f1c40f; box-shadow: 0 0 8px #f1c40f; } /* Yellow for Registration */
+        .dot-req { background: #3498db; box-shadow: 0 0 8px #3498db; } /* Blue for Client Request */
+
+        /* CONTROLS */
+        .controls { background: white; padding: 20px; border-radius: 10px; margin-top: 40px; width: 700px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); text-align: center; }
+        .btn-group { display: flex; justify-content: center; gap: 15px; margin-bottom: 15px; }
+        
+        button { padding: 10px 15px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; color: white; font-size: 13px; }
+        .btn-add { background: #27ae60; }
+        .btn-add:hover { background: #219150; }
+        
+        .btn-kill { background: #c0392b; }
+        .btn-kill:hover { background: #a93226; }
+
+        .btn-call { background: #34495e; font-size: 15px; padding: 12px 25px; }
+        .btn-call:hover { background: #2c3e50; }
+
+        .log-display { font-family: monospace; color: #555; font-size: 13px; height: 20px; }
+
+        /* KEYFRAMES */
+        @keyframes popIn { 0% { transform: scale(0); opacity: 0; } 80% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes shake { 0% { transform: translateX(0); } 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } 100% { transform: translateX(0); } }
+
+    </style>
+</head>
+<body>
+
+    <h1>Service Registry Pattern Demo</h1>
+    <p>Dynamic Discovery: Services register themselves so clients don't need hardcoded IPs.</p>
+
+    <div class="layout">
+        
+        <div class="client-box" id="client">
+            <div>📱 Client App</div>
+            <div class="client-screen" id="client-log">
+                > System Ready.<br>
+                > No Target IP.
+            </div>
+        </div>
+
+        <div class="registry-box" id="registry">
+            <div class="registry-title">📒 Service Registry (Eureka)</div>
+            <table class="registry-table" id="reg-table">
+                <thead>
+                    <tr>
+                        <th>Service</th>
+                        <th>Address</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="reg-body">
+                    </tbody>
+            </table>
+            <div style="font-size:10px; margin-top:10px; opacity:0.7;">* Auto-updates every 5s</div>
+        </div>
+
+        <div class="cloud-zone">
+            <div class="cloud-label">☁️ AWS / Cloud Region</div>
+            <div id="services-container">
+                </div>
+        </div>
+
+    </div>
+
+    <div id="dot" class="dot"></div>
+
+    <div class="controls">
+        <div class="btn-group">
+            <button class="btn-add" onclick="spawnService()">+ Start New Instance</button>
+            <button class="btn-kill" onclick="killRandomService()">- Kill Random Instance</button>
+        </div>
+        <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
+        <div class="btn-group">
+            <button class="btn-call" onclick="clientCallService()">📞 Client: Call 'Inventory'</button>
+        </div>
+        <div class="log-display" id="main-log">Waiting for action...</div>
+    </div>
+
+    <script>
+        let services = [];
+        let serviceCounter = 1;
+        const basePort = 8080;
+
+        function spawnService() {
+            const port = basePort + serviceCounter;
+            const id = `svc-${serviceCounter}`;
+            
+            // 1. Create Visual Element
+            const svcDiv = document.createElement('div');
+            svcDiv.className = 'service-instance';
+            svcDiv.id = id;
+            svcDiv.innerHTML = `📦 Inventory Service<div class="svc-details">ID: ${id} | IP: 10.0.0.${serviceCounter}:${port}</div>`;
+            document.getElementById('services-container').appendChild(svcDiv);
+
+            const svcObj = { id: id, name: 'INVENTORY-SERVICE', ip: `10.0.0.${serviceCounter}`, port: port };
+            services.push(svcObj);
+            
+            // 2. Animate Registration (Service -> Registry)
+            animatePacket(svcDiv, document.getElementById('registry'), 'dot-reg', () => {
+                updateRegistryTable();
+                log(`✅ ${id} registered itself at ${svcObj.ip}:${port}`);
+            });
+
+            serviceCounter++;
+        }
+
+        function killRandomService() {
+            if (services.length === 0) {
+                log("⚠️ No services to kill!");
+                return;
+            }
+
+            // Remove logic
+            const victimIndex = Math.floor(Math.random() * services.length);
+            const victim = services[victimIndex];
+            services.splice(victimIndex, 1);
+
+            // Update Visuals
+            const el = document.getElementById(victim.id);
+            el.classList.add('dead');
+            el.innerHTML = "💀 CRASHED";
+            
+            setTimeout(() => {
+                el.remove();
+                updateRegistryTable(); // Auto-deregister
+                log(`❌ ${victim.id} crashed. Removed from Registry.`);
+            }, 800);
+        }
+
+        function updateRegistryTable() {
+            const tbody = document.getElementById('reg-body');
+            tbody.innerHTML = "";
+            
+            if (services.length === 0) {
+                tbody.innerHTML = "<tr><td colspan='3' style='text-align:center; opacity:0.5;'>Empty...</td></tr>";
+                return;
+            }
+
+            services.forEach(svc => {
+                const row = `<tr><td>${svc.name}</td><td>${svc.ip}:${svc.port}</td><td class="status-up">UP</td></tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+
+        function clientCallService() {
+            const clientLog = document.getElementById('client-log');
+            const clientBox = document.getElementById('client');
+            const registryBox = document.getElementById('registry');
+
+            // Step 1: Client Checks Registry
+            log("🔎 Client querying Registry for 'INVENTORY-SERVICE'...");
+            clientLog.innerHTML = "> Lookup: INVENTORY...";
+            
+            animatePacket(clientBox, registryBox, 'dot-req', () => {
+                
+                // Step 2: Registry Response
+                if (services.length === 0) {
+                    clientLog.innerHTML += "<br>> <span style='color:red'>ERROR: Service Not Found</span>";
+                    log("⛔ Registry returned empty list. Call failed.");
+                    shake(clientBox);
+                    return;
+                }
+
+                // Load Balancing (Round Robin simulated by picking random)
+                const target = services[Math.floor(Math.random() * services.length)];
+                clientLog.innerHTML += `<br>> Found: ${target.ip}:${target.port}`;
+                
+                // Step 3: Client Calls Service directly
+                const targetEl = document.getElementById(target.id);
+                
+                setTimeout(() => {
+                    log(`🚀 Calling Service at ${target.ip}:${target.port}...`);
+                    animatePacket(clientBox, targetEl, 'dot-req', () => {
+                        pulse(targetEl);
+                        clientLog.innerHTML += "<br>> <span style='color:green'>SUCCESS: 200 OK</span>";
+                        log("✅ Request successfully handled by " + target.id);
+                    });
+                }, 500);
+            });
+        }
+
+        // --- ANIMATION UTILS ---
+        function animatePacket(fromEl, toEl, dotClass, callback) {
+            const dot = document.getElementById('dot');
+            dot.className = `dot ${dotClass}`;
+            dot.style.display = 'block';
+
+            const fromRect = fromEl.getBoundingClientRect();
+            const toRect = toEl.getBoundingClientRect();
+
+            // Start Position
+            dot.style.top = (fromRect.top + fromRect.height/2) + 'px';
+            dot.style.left = (fromRect.left + fromRect.width/2) + 'px';
+            dot.style.transition = 'none'; // reset
+
+            // Force reflow
+            void dot.offsetWidth; 
+
+            // End Position
+            dot.style.transition = 'all 0.6s ease-in-out';
+            dot.style.top = (toRect.top + toRect.height/2) + 'px';
+            dot.style.left = (toRect.left + toRect.width/2) + 'px';
+
+            setTimeout(() => {
+                dot.style.display = 'none';
+                if(callback) callback();
+            }, 600);
+        }
+
+        function pulse(el) {
+            el.style.transform = "scale(1.1)";
+            setTimeout(() => el.style.transform = "scale(1)", 200);
+        }
+
+        function shake(el) {
+            el.style.animation = 'shake 0.5s';
+            setTimeout(() => el.style.animation = '', 500);
+        }
+
+        function log(msg) {
+            document.getElementById('main-log').innerText = msg;
+        }
+
+        // Init
+        updateRegistryTable();
+    </script>
+</body>
+</html>
