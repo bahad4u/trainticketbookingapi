@@ -2990,3 +2990,276 @@
     </script>
 </body>
 </html>
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Choreography Saga: IRCTC Tatkal</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #1e1e2e; display: flex; flex-direction: column; align-items: center; padding: 20px; color: white; }
+        
+        .layout { position: relative; width: 900px; height: 500px; margin-top: 20px; }
+        
+        /* EVENT BUS (KAFKA) */
+        .event-bus-container { width: 100%; height: 60px; background: #333; border-radius: 30px; border: 2px dashed #666; position: absolute; top: 0; display: flex; align-items: center; justify-content: center; z-index: 0; }
+        .event-bus-label { color: #888; font-weight: bold; letter-spacing: 2px; font-size: 14px; background: #1e1e2e; padding: 0 10px; }
+
+        /* SERVICES */
+        .service-row { display: flex; justify-content: space-between; width: 100%; position: absolute; bottom: 0; }
+        
+        .service { width: 180px; height: 140px; background: #2c2c3e; border: 2px solid #444; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; transition: 0.3s; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        
+        .svc-icon { font-size: 30px; margin-bottom: 10px; }
+        .svc-name { font-weight: bold; font-size: 14px; margin-bottom: 5px; }
+        .svc-status { font-size: 11px; padding: 3px 8px; border-radius: 4px; background: #111; min-width: 80px; text-align: center; color: #aaa; transition: 0.3s; }
+
+        /* SPECIFIC COLORS */
+        .svc-booking { border-bottom: 4px solid #3498db; }
+        .svc-seat { border-bottom: 4px solid #f1c40f; }
+        .svc-pay { border-bottom: 4px solid #e74c3c; }
+        .svc-notify { border-bottom: 4px solid #2ecc71; }
+
+        /* STATES */
+        .active { box-shadow: 0 0 20px rgba(255,255,255,0.2); background: #3a3a4e; }
+        .success .svc-status { background: #2ecc71; color: #fff; }
+        .error .svc-status { background: #e74c3c; color: #fff; }
+        .rollback .svc-status { background: #e67e22; color: #fff; }
+
+        /* CONNECTOR LINES (Vertical pipes to bus) */
+        .pipe { position: absolute; width: 4px; background: #444; top: 60px; bottom: 140px; z-index: -1; }
+        
+        /* MESSAGE DOTS */
+        .packet { width: 14px; height: 14px; border-radius: 50%; position: absolute; z-index: 100; display: none; box-shadow: 0 0 10px white; }
+        .pkg-event { background: #f1c40f; } /* Event Color */
+        .pkg-err { background: #e74c3c; }   /* Error Event Color */
+
+        /* EVENT BUBBLE (The Toast) */
+        .event-bubble { position: absolute; top: 70px; background: #fff; color: #333; padding: 5px 10px; border-radius: 15px; font-size: 11px; font-weight: bold; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; }
+
+        /* CONTROLS */
+        .controls { background: #fff; padding: 20px; border-radius: 10px; margin-top: 20px; width: 700px; color: #333; text-align: center; }
+        .btn-group { display: flex; justify-content: center; gap: 20px; margin-bottom: 10px; }
+        
+        button { padding: 12px 20px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; color: white; transition: 0.2s; }
+        .btn-success { background: #2ecc71; }
+        .btn-success:hover { background: #27ae60; }
+        .btn-fail { background: #e74c3c; }
+        .btn-fail:hover { background: #c0392b; }
+
+        #log { font-family: monospace; font-size: 12px; color: #555; margin-top: 10px; min-height: 20px; }
+
+    </style>
+</head>
+<body>
+
+    <h1>IRCTC Choreography Saga</h1>
+    <p>Decoupled Architecture: Services react to events on the Message Bus.</p>
+
+    <div class="layout">
+        
+        <div class="event-bus-container">
+            <span class="event-bus-label">⚡ MESSAGE BROKER (KAFKA) ⚡</span>
+        </div>
+
+        <div class="pipe" style="left: 100px;"></div> <div class="pipe" style="left: 340px;"></div> <div class="pipe" style="left: 580px;"></div> <div class="pipe" style="left: 820px;"></div> <div class="service-row">
+            <div class="service svc-booking" id="svc-booking">
+                <div class="svc-icon">🚆</div>
+                <div class="svc-name">Booking Svc</div>
+                <div class="svc-status" id="st-booking">Idle</div>
+            </div>
+
+            <div class="service svc-seat" id="svc-seat">
+                <div class="svc-icon">💺</div>
+                <div class="svc-name">Seat Alloc. Svc</div>
+                <div class="svc-status" id="st-seat">Idle</div>
+            </div>
+
+            <div class="service svc-pay" id="svc-pay">
+                <div class="svc-icon">💳</div>
+                <div class="svc-name">Payment Svc</div>
+                <div class="svc-status" id="st-pay">Idle</div>
+            </div>
+
+            <div class="service svc-notify" id="svc-notify">
+                <div class="svc-icon">📩</div>
+                <div class="svc-name">Notification Svc</div>
+                <div class="svc-status" id="st-notify">Idle</div>
+            </div>
+        </div>
+
+        <div id="packet" class="packet"></div>
+        <div id="evt-lbl" class="event-bubble">Event Name</div>
+
+    </div>
+
+    <div class="controls">
+        <div class="btn-group">
+            <button class="btn-success" onclick="startFlow(true)">✅ Happy Path (Ticket Confirmed)</button>
+            <button class="btn-fail" onclick="startFlow(false)">⚠️ Payment Failure (Rollback)</button>
+        </div>
+        <div id="log">Waiting for user input...</div>
+    </div>
+
+    <script>
+        // Coordinates for pipes (approximate centers of services)
+        const POS = {
+            booking: 100,
+            seat: 340,
+            pay: 580,
+            notify: 820,
+            busY: 30,    // Top of bus
+            svcY: 360    // Top of service box
+        };
+
+        function reset() {
+            document.querySelectorAll('.service').forEach(el => {
+                el.className = el.className.split(' ')[0] + ' service'; // keep base class
+                el.querySelector('.svc-status').innerText = 'Idle';
+            });
+            document.getElementById('log').innerText = "Starting Transaction...";
+        }
+
+        function startFlow(isSuccess) {
+            reset();
+            
+            // Step 1: User creates Booking
+            updateStatus('booking', 'PENDING', 'active');
+            log("User clicks 'Book'. Booking Service creates Record.");
+
+            // Event: BOOKING_CREATED -> Goes to Seat Svc
+            setTimeout(() => {
+                emitEvent('booking', 'seat', 'BOOKING_CREATED', false, () => {
+                    // Step 2: Seat Allocation
+                    updateStatus('seat', 'RESERVED', 'success');
+                    log("Seat Service reserves Berth S7-42.");
+
+                    // Event: SEAT_RESERVED -> Goes to Payment Svc
+                    setTimeout(() => {
+                        emitEvent('seat', 'pay', 'SEAT_RESERVED', false, () => {
+                            // Step 3: Payment
+                            if (isSuccess) {
+                                // HAPPY PATH
+                                updateStatus('pay', 'PAID', 'success');
+                                log("Payment Service charges ₹1200.");
+
+                                // Event: PAYMENT_SUCCESS -> Goes to Notification
+                                setTimeout(() => {
+                                    emitEvent('pay', 'notify', 'PAYMENT_SUCCESS', false, () => {
+                                        updateStatus('notify', 'SENT', 'success');
+                                        updateStatus('booking', 'CONFIRMED', 'success');
+                                        log("🎉 Ticket SMS Sent! Booking Confirmed.");
+                                    });
+                                }, 800);
+
+                            } else {
+                                // FAILURE PATH
+                                updateStatus('pay', 'FAILED', 'error');
+                                log("❌ Payment Failed (Bank Timeout).");
+
+                                // Event: PAYMENT_FAILED -> Goes back to Seat & Booking
+                                setTimeout(() => {
+                                    log("📢 Publishing PAYMENT_FAILED event...");
+                                    
+                                    // 1. Notify Seat Service to Rollback
+                                    emitEvent('pay', 'seat', 'PAYMENT_FAILED', true, () => {
+                                        updateStatus('seat', 'RELEASED', 'rollback');
+                                        log("↩️ Seat Service compensates: Berth released.");
+                                        
+                                        // 2. Notify Booking Service to Cancel
+                                        setTimeout(() => {
+                                            emitEvent('seat', 'booking', 'SEAT_RELEASED', true, () => {
+                                                updateStatus('booking', 'CANCELLED', 'rollback');
+                                                log("🛑 Booking Service compensates: Status set to CANCELLED.");
+                                            });
+                                        }, 800);
+                                    });
+                                }, 800);
+                            }
+                        });
+                    }, 800);
+                });
+            }, 800);
+        }
+
+        // --- ANIMATION LOGIC ---
+        function emitEvent(from, to, eventName, isError, callback) {
+            const pkt = document.getElementById('packet');
+            const lbl = document.getElementById('evt-lbl');
+            
+            // Color setup
+            pkt.className = 'packet ' + (isError ? 'pkg-err' : 'pkg-event');
+            pkt.style.display = 'block';
+            
+            // Set Label
+            lbl.innerText = eventName;
+            lbl.style.color = isError ? '#e74c3c' : '#333';
+            lbl.style.left = (POS[from] - 40) + 'px';
+            lbl.style.opacity = 1;
+
+            // 1. UP to Bus
+            animate(pkt, POS[from], POS.svcY, POS[from], POS.busY, 400, () => {
+                
+                // 2. ACROSS Bus
+                animate(pkt, POS[from], POS.busY, POS[to], POS.busY, 600, () => {
+                    
+                    // Move Label
+                    lbl.style.left = (POS[to] - 40) + 'px';
+
+                    // 3. DOWN to Service
+                    animate(pkt, POS[to], POS.busY, POS[to], POS.svcY, 400, () => {
+                        pkt.style.display = 'none';
+                        lbl.style.opacity = 0;
+                        if(callback) callback();
+                    });
+                });
+            });
+        }
+
+        function animate(el, x1, y1, x2, y2, duration, cb) {
+            const start = performance.now();
+            
+            function step(timestamp) {
+                const progress = Math.min((timestamp - start) / duration, 1);
+                
+                const curX = x1 + (x2 - x1) * progress;
+                const curY = y1 + (y2 - y1) * progress;
+                
+                el.style.left = curX + 'px';
+                el.style.top = curY + 'px';
+
+                if (progress < 1) {
+                    requestAnimationFrame(step);
+                } else {
+                    cb();
+                }
+            }
+            requestAnimationFrame(step);
+        }
+
+        function updateStatus(id, text, type) {
+            const el = document.getElementById('svc-' + id);
+            const badge = document.getElementById('st-' + id);
+            
+            // Reset classes
+            el.classList.remove('active', 'success', 'error', 'rollback');
+            el.classList.add(type);
+            
+            badge.innerText = text;
+            
+            // Pulse animation
+            el.style.transform = "scale(1.1)";
+            setTimeout(() => el.style.transform = "scale(1)", 200);
+        }
+
+        function log(msg) {
+            document.getElementById('log').innerText = "> " + msg;
+        }
+
+    </script>
+</body>
+</html>
