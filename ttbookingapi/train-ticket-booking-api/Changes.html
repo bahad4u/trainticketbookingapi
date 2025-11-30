@@ -455,3 +455,224 @@
     </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IRCTC Tatkal Simulator (Bulkhead Demo)</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f8f9fa; display: flex; flex-direction: column; align-items: center; padding: 20px; color: #333; }
+        h1 { color: #005a9c; } /* IRCTC Blue */
+        .container { display: flex; gap: 40px; margin-top: 20px; }
+        
+        /* The Service Cards */
+        .service-card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 320px; text-align: center; border-top: 5px solid #ccc; }
+        .card-tatkal { border-top-color: #e74c3c; } /* Red for Rush */
+        .card-login { border-top-color: #27ae60; }  /* Green for Safe */
+        
+        .service-title { font-weight: bold; font-size: 20px; margin-bottom: 10px; display: block; }
+        .subtitle { color: #777; font-size: 14px; margin-bottom: 15px; }
+
+        /* The Resource Slots */
+        .pool-container { background: #eee; padding: 10px; border-radius: 8px; margin: 15px 0; min-height: 60px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+        .slot { width: 30px; height: 30px; border-radius: 4px; border: 2px solid #ccc; background: white; transition: all 0.2s; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+        
+        .slot.busy-tatkal { background-color: #e74c3c; border-color: #c0392b; color: white; content: "T"; } 
+        .slot.busy-login { background-color: #2ecc71; border-color: #27ae60; color: white; } 
+        
+        /* Buttons */
+        button { padding: 12px 20px; margin: 5px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; color: white; transition: 0.2s; font-size: 14px; }
+        .btn-tatkal { background-color: #e74c3c; width: 100%; }
+        .btn-tatkal:hover { background-color: #c0392b; }
+        .btn-tatkal:active { transform: scale(0.98); }
+
+        .btn-login { background-color: #2ecc71; width: 100%; }
+        .btn-login:hover { background-color: #27ae60; }
+        .btn-login:active { transform: scale(0.98); }
+
+        .btn-toggle { background-color: #34495e; margin-bottom: 20px; width: auto; padding: 10px 30px; }
+        
+        /* Status Text */
+        .status { height: 25px; color: #555; font-size: 14px; margin-top: 10px; font-weight: bold;}
+        .error-msg { color: white; background: #e74c3c; padding: 2px 8px; border-radius: 4px; animation: shake 0.5s; }
+        
+        @keyframes shake { 0% { transform: translateX(0); } 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } 100% { transform: translateX(0); } }
+
+        /* Mode Indicator */
+        #mode-display { font-size: 24px; font-weight: bold; color: #333; margin-bottom: 10px; }
+        .mode-desc { max-width: 650px; text-align: center; color: #666; margin-bottom: 30px; line-height: 1.5; }
+    </style>
+</head>
+<body>
+
+    <h1>IRCTC System Simulator</h1>
+    
+    <div id="mode-display">Mode: Shared Resources (Monolith)</div>
+    <div class="mode-desc" id="mode-desc">
+        All servers are in one shared pool. If "Tatkal Booking" hogs all connections, users cannot even Login to check PNR status.
+    </div>
+
+    <button class="btn-toggle" onclick="toggleMode()">Switch to Bulkhead Mode</button>
+
+    <div class="container">
+        
+        <div class="service-card card-tatkal">
+            <span class="service-title">🚄 Tatkal Booking</span>
+            <div class="subtitle">Heavy Load (Payment/Gateway)<br>Duration: 5 Seconds</div>
+            
+            <div id="pool-tatkal" class="pool-container">
+                </div>
+            
+            <button class="btn-tatkal" onclick="addTask('tatkal')">⚡ Book Tatkal Ticket</button>
+            <div id="status-tatkal" class="status"></div>
+        </div>
+
+        <div class="service-card card-login">
+            <span class="service-title">👤 User Login / PNR</span>
+            <div class="subtitle">Light Load (DB Query)<br>Duration: 0.5 Seconds</div>
+            
+            <div id="pool-login" class="pool-container">
+                </div>
+            
+            <button class="btn-login" onclick="addTask('login')">🔍 Check PNR / Login</button>
+            <div id="status-login" class="status"></div>
+        </div>
+
+    </div>
+
+    <script>
+        let isBulkheadMode = false;
+        const TOTAL_SLOTS = 12; // Total connections available
+        const BULKHEAD_SPLIT = 6; // 6 for Tatkal, 6 for Login
+        
+        // State
+        let activeTasks = { tatkal: 0, login: 0 };
+
+        function renderPools() {
+            const tatkalContainer = document.getElementById('pool-tatkal');
+            const loginContainer = document.getElementById('pool-login');
+            tatkalContainer.innerHTML = '';
+            loginContainer.innerHTML = '';
+
+            if (!isBulkheadMode) {
+                // Shared Mode: Tatkal container holds ALL slots visually
+                loginContainer.innerHTML = '<span style="color:#aaa; font-style:italic; padding-top:20px;">Using Shared Pool -></span>';
+                
+                for(let i=0; i<TOTAL_SLOTS; i++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'slot';
+                    // Visual logic for shared pool
+                    if (i < activeTasks.tatkal) {
+                        slot.classList.add('busy-tatkal');
+                        slot.innerText = "T";
+                    }
+                    else if (i < activeTasks.tatkal + activeTasks.login) {
+                        slot.classList.add('busy-login');
+                        slot.innerText = "L";
+                    }
+                    tatkalContainer.appendChild(slot);
+                }
+            } else {
+                // Bulkhead Mode: Separate containers
+                
+                // Tatkal Pool
+                for(let i=0; i<BULKHEAD_SPLIT; i++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'slot';
+                    if (i < activeTasks.tatkal) {
+                        slot.classList.add('busy-tatkal');
+                        slot.innerText = "T";
+                    }
+                    tatkalContainer.appendChild(slot);
+                }
+                // Login Pool
+                for(let i=0; i<BULKHEAD_SPLIT; i++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'slot';
+                    if (i < activeTasks.login) {
+                        slot.classList.add('busy-login');
+                        slot.innerText = "L";
+                    }
+                    loginContainer.appendChild(slot);
+                }
+            }
+        }
+
+        function addTask(type) {
+            const totalActive = activeTasks.tatkal + activeTasks.login;
+
+            // --- LOGIC FOR SHARED MODE ---
+            if (!isBulkheadMode) {
+                if (totalActive >= TOTAL_SLOTS) {
+                    showError(type, "SERVER BUSY! Please try again.");
+                    return;
+                }
+            } 
+            // --- LOGIC FOR BULKHEAD MODE ---
+            else {
+                if (activeTasks[type] >= BULKHEAD_SPLIT) {
+                    if(type === 'tatkal') showError(type, "Tatkal Queue Full!");
+                    if(type === 'login') showError(type, "Login Queue Full!");
+                    return;
+                }
+            }
+
+            // Start the task
+            activeTasks[type]++;
+            renderPools();
+
+            // Simulate duration
+            const duration = type === 'tatkal' ? 5000 : 500; // 5s vs 0.5s
+            setTimeout(() => {
+                activeTasks[type]--;
+                renderPools();
+            }, duration);
+        }
+
+        function showError(type, msg) {
+            const el = document.getElementById(type === 'tatkal' ? 'status-tatkal' : 'status-login');
+            el.innerText = msg;
+            el.classList.add('error-msg');
+            setTimeout(() => {
+                el.innerText = "";
+                el.classList.remove('error-msg');
+            }, 1000);
+        }
+
+        function toggleMode() {
+            isBulkheadMode = !isBulkheadMode;
+            // Reset tasks for clean switch
+            activeTasks = { tatkal: 0, login: 0 };
+            
+            const title = document.getElementById('mode-display');
+            const desc = document.getElementById('mode-desc');
+            const btn = document.querySelector('.btn-toggle');
+
+            if(isBulkheadMode) {
+                title.innerText = "Mode: Bulkhead Pattern (Safe Mode)";
+                title.style.color = "#2ecc71";
+                desc.innerText = "We have split the servers. Even if Tatkal is 100% full, the Login/PNR service has its own dedicated connections.";
+                btn.innerText = "Reset to Shared Mode";
+            } else {
+                title.innerText = "Mode: Shared Resources (Monolith)";
+                title.style.color = "#333";
+                desc.innerText = "All servers are in one shared pool. If 'Tatkal Booking' hogs all connections, users cannot even Login to check PNR status.";
+                btn.innerText = "Switch to Bulkhead Mode";
+            }
+            renderPools();
+        }
+
+        // Init
+        renderPools();
+    </script>
+</body>
+</html>
