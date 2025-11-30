@@ -1111,3 +1111,221 @@
     </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Strangler Pattern: Data Consistency Demo</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; display: flex; flex-direction: column; align-items: center; padding: 20px; color: #333; }
+        
+        .layout { display: flex; gap: 80px; margin-top: 50px; align-items: flex-start; }
+        
+        /* Systems */
+        .system-col { display: flex; flex-direction: column; align-items: center; gap: 20px; width: 250px; }
+        
+        .app-box { padding: 20px; border-radius: 8px; text-align: center; width: 100%; color: white; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.1); z-index: 2; }
+        .legacy-app { background: #7f8c8d; border: 4px solid #555; }
+        .new-app { background: #27ae60; border: 4px solid #2ecc71; opacity: 0.5; } /* Starts dimmed */
+        .new-app.active { opacity: 1; box-shadow: 0 0 15px #2ecc71; }
+
+        /* Databases (Cylinders) */
+        .db-container { position: relative; width: 120px; height: 140px; }
+        .db { width: 100%; height: 100px; border-radius: 50%/20px; position: absolute; bottom: 0; z-index: 1; border: 2px solid rgba(0,0,0,0.2); transition: all 0.3s; display: flex; align-items: center; justify-content: center; flex-direction: column; font-size: 13px; }
+        .db::before { content: ''; position: absolute; top: -10px; left: 0; width: 100%; height: 20px; border-radius: 50%; border: 2px solid rgba(0,0,0,0.2); z-index: 2; background: inherit; }
+        
+        .legacy-db { background: #95a5a6; color: white; }
+        .new-db { background: #2ecc71; color: white; }
+
+        .data-row { background: rgba(255,255,255,0.3); margin: 2px; padding: 2px 10px; border-radius: 4px; font-family: monospace; width: 80%; text-align: center; }
+
+        /* Sync Pipe */
+        .sync-pipe { position: absolute; top: 250px; left: 50%; transform: translateX(-50%); width: 200px; height: 10px; background: #ddd; border-radius: 5px; z-index: 0; display: flex; align-items: center; justify-content: center; }
+        .sync-label { position: absolute; top: -25px; font-size: 12px; color: #777; font-weight: bold; }
+        
+        /* Moving Packet */
+        .packet { width: 15px; height: 15px; background: #e67e22; border-radius: 50%; position: absolute; z-index: 10; box-shadow: 0 0 5px orange; display: none; }
+
+        /* Controls */
+        .controls { background: white; padding: 20px; border-radius: 10px; margin-top: 50px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 600px; }
+        button { padding: 10px 20px; margin: 0 10px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; color: white; font-size: 14px; transition: 0.2s; }
+        
+        .btn-write { background-color: #3498db; }
+        .btn-write:hover { background-color: #2980b9; }
+
+        .btn-switch { background-color: #f1c40f; color: #333; }
+        .btn-switch:hover { background-color: #f39c12; }
+
+        .status-log { margin-top: 15px; color: #555; font-size: 14px; font-family: monospace; }
+        .sync-status { font-weight: bold; color: #e74c3c; }
+        .sync-status.synced { color: #27ae60; }
+
+    </style>
+</head>
+<body>
+
+    <h1>Data Consistency Simulator</h1>
+    <p>Ensuring the New Database has the same data as the Old Database <i>before</i> we switch users over.</p>
+
+    <div class="layout">
+        
+        <div class="system-col">
+            <div class="app-box legacy-app">Legacy Monolith<br>(Active)</div>
+            <div class="db-container">
+                <div class="db legacy-db">
+                    <div style="margin-top:20px">LEGACY DB</div>
+                    <div class="data-row" id="data-old">Ver: 1.0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="sync-pipe">
+            <span class="sync-label">🔄 CDC Sync Agent</span>
+        </div>
+
+        <div class="system-col">
+            <div id="new-app-box" class="app-box new-app">Microservice<br>(Standby)</div>
+            <div class="db-container">
+                <div class="db new-db">
+                    <div style="margin-top:20px">NEW DB</div>
+                    <div class="data-row" id="data-new">Ver: 0.0</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="packet" class="packet"></div>
+
+    <div class="controls">
+        <div style="margin-bottom: 15px;">
+            <button class="btn-write" onclick="updateLegacyData()">1. User Updates Profile (Legacy)</button>
+            <button class="btn-switch" onclick="switchTraffic()">2. Switch Traffic to New</button>
+        </div>
+        
+        <div class="status-log">
+            Database Status: <span id="sync-status" class="sync-status">OUT OF SYNC</span>
+            <br>
+            <span id="log-msg">Waiting for user action...</span>
+        </div>
+    </div>
+
+    <script>
+        let version = 1;
+        let newDbVersion = 0;
+        let isTrafficSwitched = false;
+
+        function updateLegacyData() {
+            if(isTrafficSwitched) {
+                log("Error: Traffic already switched. Use the New System!", true);
+                return;
+            }
+
+            // 1. Update Legacy
+            version++;
+            document.getElementById('data-old').innerText = "Ver: " + version + ".0";
+            updateSyncStatus();
+            log("User saved data to Legacy DB. Sync process starting...");
+
+            // 2. Animate Sync
+            animateSync();
+        }
+
+        function animateSync() {
+            const packet = document.getElementById('packet');
+            const startRect = document.querySelector('.legacy-db').getBoundingClientRect();
+            const endRect = document.querySelector('.new-db').getBoundingClientRect();
+
+            // Start Position
+            packet.style.display = 'block';
+            packet.style.top = (startRect.top + 50) + 'px';
+            packet.style.left = (startRect.left + 50) + 'px';
+
+            // Animation
+            setTimeout(() => {
+                packet.style.transition = "all 1s ease-in-out";
+                packet.style.left = (endRect.left + 50) + 'px';
+                
+                // End Position logic
+                setTimeout(() => {
+                    packet.style.display = 'none';
+                    packet.style.transition = "none"; // reset
+                    
+                    // Update New DB
+                    newDbVersion = version;
+                    document.getElementById('data-new').innerText = "Ver: " + newDbVersion + ".0";
+                    pulse(document.querySelector('.new-db'));
+                    updateSyncStatus();
+                    log("Sync Complete! New DB updated via background process.");
+                }, 1000);
+            }, 100);
+        }
+
+        function switchTraffic() {
+            if (version !== newDbVersion) {
+                log("⚠️ DANGER: Cannot switch! Databases are out of sync. Wait for sync.", true);
+                return;
+            }
+
+            isTrafficSwitched = true;
+            document.querySelector('.legacy-app').style.opacity = "0.5";
+            document.querySelector('.legacy-app').innerText = "Legacy Monolith\n(Idle)";
+            
+            const newApp = document.getElementById('new-app-box');
+            newApp.classList.add('active');
+            newApp.innerText = "Microservice\n(ACTIVE)";
+            
+            document.querySelector('.btn-write').innerText = "User Updates Profile (Microservice)";
+            document.querySelector('.btn-write').setAttribute('onclick', 'updateNewDataOnly()');
+            document.querySelector('.btn-switch').style.display = 'none'; // Hide switch button
+
+            log("SUCCESS: Traffic Switched! The New System is now the Master.");
+        }
+
+        function updateNewDataOnly() {
+            version++;
+            newDbVersion = version;
+            document.getElementById('data-new').innerText = "Ver: " + version + ".0";
+            pulse(document.querySelector('.new-db'));
+            log("User updated data directly in New System. Legacy is now obsolete.");
+        }
+
+        function updateSyncStatus() {
+            const statusEl = document.getElementById('sync-status');
+            if(version === newDbVersion) {
+                statusEl.innerText = "SYNCED";
+                statusEl.className = "sync-status synced";
+            } else {
+                statusEl.innerText = "SYNCING...";
+                statusEl.className = "sync-status";
+            }
+        }
+
+        function pulse(el) {
+            el.style.transform = "scale(1.1)";
+            el.style.borderColor = "white";
+            setTimeout(() => {
+                el.style.transform = "scale(1)";
+                el.style.borderColor = "rgba(0,0,0,0.2)";
+            }, 200);
+        }
+
+        function log(msg, isError = false) {
+            const el = document.getElementById('log-msg');
+            el.innerText = msg;
+            el.style.color = isError ? "red" : "#555";
+        }
+    </script>
+</body>
+</html>
