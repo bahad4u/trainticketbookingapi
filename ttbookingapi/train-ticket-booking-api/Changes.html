@@ -4180,3 +4180,224 @@ HTTP/1.1 200 OK
     </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Event-Driven Architecture Simulator</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #1e1e2e; display: flex; flex-direction: column; align-items: center; padding: 20px; color: white; }
+        
+        .layout { display: flex; flex-direction: column; align-items: center; margin-top: 40px; width: 900px; position: relative; height: 500px; }
+        
+        /* PRODUCER (Top) */
+        .producer-zone { width: 100%; display: flex; justify-content: center; margin-bottom: 40px; }
+        .producer-box { width: 160px; height: 100px; background: #3498db; border: 4px solid #2980b9; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; position: relative; z-index: 10; box-shadow: 0 0 20px rgba(52, 152, 219, 0.4); }
+
+        /* EVENT BUS (Middle) */
+        .bus-zone { width: 100%; height: 60px; background: #333; border-radius: 30px; border: 2px dashed #666; display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 60px; }
+        .bus-label { background: #1e1e2e; padding: 0 10px; color: #888; font-weight: bold; letter-spacing: 2px; }
+
+        /* CONSUMERS (Bottom) */
+        .consumer-zone { width: 100%; display: flex; justify-content: space-around; }
+        .consumer-box { width: 140px; height: 100px; background: #2c3e50; border: 2px solid #444; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; position: relative; transition: all 0.2s; }
+        .consumer-box.active { background: #2ecc71; border-color: #27ae60; transform: scale(1.1); box-shadow: 0 0 15px #2ecc71; }
+        
+        .status-text { font-size: 10px; margin-top: 5px; opacity: 0.7; font-family: monospace; }
+
+        /* PIPES */
+        .pipe-down { position: absolute; width: 4px; background: #555; z-index: 0; }
+
+        /* EVENT PACKETS */
+        .packet { width: 20px; height: 20px; background: #f1c40f; border-radius: 50%; position: absolute; z-index: 100; display: none; box-shadow: 0 0 10px #f1c40f; border: 2px solid white; }
+
+        /* CONTROLS */
+        .controls { background: white; padding: 20px; border-radius: 10px; margin-top: 20px; width: 600px; color: #333; text-align: center; }
+        button { padding: 12px 25px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; background: #3498db; color: white; transition: 0.2s; font-size: 16px; }
+        button:hover { background: #2980b9; }
+
+        .log-display { font-family: monospace; background: #eee; padding: 10px; margin-top: 15px; border-radius: 5px; min-height: 80px; text-align: left; font-size: 12px; max-height: 100px; overflow-y: auto; color: #333; }
+
+    </style>
+</head>
+<body>
+
+    <h1>Event-Driven Architecture Simulator</h1>
+    <p>Decoupling: One event triggers multiple, independent actions.</p>
+
+    <div class="layout">
+        
+        <div class="producer-zone">
+            <div class="producer-box" id="producer">
+                <div style="font-size:30px;">👤</div>
+                <div>User Service</div>
+                <div style="font-size:10px;">(Publisher)</div>
+            </div>
+        </div>
+
+        <div class="pipe-down" style="top: 100px; height: 40px; left: 50%; transform: translateX(-50%);"></div>
+
+        <div class="bus-zone" id="bus">
+            <span class="bus-label">⚡ EVENT BUS / TOPIC ⚡</span>
+        </div>
+
+        <div class="consumer-zone">
+            
+            <div class="consumer-box" id="sub-email">
+                <div style="font-size:24px;">📧</div>
+                <div>Email Svc</div>
+                <div class="status-text" id="log-email">Listening...</div>
+                <div class="pipe-down" style="top: -60px; height: 60px; left: 50%; transform: translateX(-50%);"></div>
+            </div>
+
+            <div class="consumer-box" id="sub-analytics">
+                <div style="font-size:24px;">📊</div>
+                <div>Analytics Svc</div>
+                <div class="status-text" id="log-analytics">Listening...</div>
+                <div class="pipe-down" style="top: -60px; height: 60px; left: 50%; transform: translateX(-50%);"></div>
+            </div>
+
+            <div class="consumer-box" id="sub-fraud">
+                <div style="font-size:24px;">🛡️</div>
+                <div>Fraud Svc</div>
+                <div class="status-text" id="log-fraud">Listening...</div>
+                <div class="pipe-down" style="top: -60px; height: 60px; left: 50%; transform: translateX(-50%);"></div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <div id="packet" class="packet"></div>
+
+    <div class="controls">
+        <button onclick="publishEvent()">📢 User Signed Up!</button>
+        <div class="log-display" id="main-log">Waiting for events...</div>
+    </div>
+
+    <script>
+        function publishEvent() {
+            // Reset visuals
+            resetConsumers();
+            log("--- New Sequence ---");
+            log("📢 User Service: Publishing 'USER_REGISTERED' event...");
+
+            const producer = document.getElementById('producer');
+            const bus = document.getElementById('bus');
+            
+            // Pulse Producer
+            producer.style.transform = "scale(1.1)";
+            setTimeout(() => producer.style.transform = "scale(1)", 200);
+
+            // 1. Animate to Bus
+            animatePacket(producer, bus, () => {
+                
+                log("⚡ Bus: Broadcasting event to 3 subscribers...");
+                
+                // 2. Fan-out to Subscribers (Parallel)
+                const subs = ['sub-email', 'sub-analytics', 'sub-fraud'];
+                
+                subs.forEach((subId, index) => {
+                    const subEl = document.getElementById(subId);
+                    
+                    // Create individual packets for fan-out
+                    const p = document.createElement('div');
+                    p.className = 'packet';
+                    p.style.display = 'block';
+                    document.body.appendChild(p);
+                    
+                    // Delay slightly for visual effect
+                    setTimeout(() => {
+                        animateCustomPacket(p, bus, subEl, () => {
+                            p.remove();
+                            activateConsumer(subId);
+                        });
+                    }, index * 100);
+                });
+
+            });
+        }
+
+        function activateConsumer(id) {
+            const el = document.getElementById(id);
+            const status = document.getElementById(id.replace('sub', 'log'));
+            
+            el.classList.add('active');
+            
+            // Specific logic logs
+            if (id === 'sub-email') {
+                status.innerText = "Email Sent!";
+                log("📧 Email Svc: Sent welcome email.");
+            } else if (id === 'sub-analytics') {
+                status.innerText = "Count +1";
+                log("📊 Analytics: Incremented daily signups.");
+            } else if (id === 'sub-fraud') {
+                status.innerText = "Scan OK";
+                log("🛡️ Fraud Svc: User marked safe.");
+            }
+
+            setTimeout(() => {
+                el.classList.remove('active');
+                status.innerText = "Listening...";
+            }, 1500);
+        }
+
+        function resetConsumers() {
+            document.querySelectorAll('.consumer-box').forEach(el => el.classList.remove('active'));
+        }
+
+        // --- ANIMATION UTILS ---
+        function animatePacket(fromEl, toEl, callback) {
+            const pkt = document.getElementById('packet');
+            const f = fromEl.getBoundingClientRect();
+            const t = toEl.getBoundingClientRect();
+
+            pkt.style.display = 'block';
+            pkt.style.top = (f.bottom - 10) + 'px';
+            pkt.style.left = (f.left + f.width/2 - 10) + 'px';
+            
+            pkt.offsetHeight; // force reflow
+
+            pkt.style.transition = 'all 0.5s ease-in';
+            pkt.style.top = (t.top + t.height/2 - 10) + 'px';
+            pkt.style.left = (t.left + t.width/2 - 10) + 'px';
+
+            setTimeout(() => {
+                pkt.style.display = 'none';
+                pkt.style.transition = 'none';
+                if(callback) callback();
+            }, 500);
+        }
+
+        function animateCustomPacket(pkt, fromEl, toEl, callback) {
+            const f = fromEl.getBoundingClientRect();
+            const t = toEl.getBoundingClientRect();
+
+            pkt.style.top = (f.top + f.height/2 - 10) + 'px';
+            pkt.style.left = (f.left + f.width/2 - 10) + 'px';
+            
+            pkt.offsetHeight;
+
+            pkt.style.transition = 'all 0.5s ease-out';
+            pkt.style.top = (t.top) + 'px';
+            pkt.style.left = (t.left + t.width/2 - 10) + 'px';
+
+            setTimeout(callback, 500);
+        }
+
+        function log(msg) {
+            const box = document.getElementById('main-log');
+            box.innerHTML = `> ${msg}<br>` + box.innerHTML;
+        }
+
+    </script>
+</body>
+</html>
